@@ -487,8 +487,8 @@ const App: React.FC = () => {
             <SectionHeader title="선납권 할인을 선택하세요" step={5} />
             <div className="mb-6 bg-blue-50 p-4 rounded-2xl border border-blue-100">
               <p className="text-sm text-blue-700 leading-relaxed">
-                <span className="font-bold block mb-1">💡 선납권 할인 안내</span>
-                인터넷 및 B tv 요금에서 추가 할인을 적용할 수 있는 권권입니다. 각 항목별로 중복 적용이 가능하며, 대구 및 서울 지역은 특별 혜택이 적용될 수 있습니다.
+                <span className="font-bold block mb-1">💡 선납권 주의 사항 </span>
+                골든, 레드 상품당 8000원까지 사용가능
               </p>
             </div>
             <div className="bg-white p-8 rounded-3xl border border-gray-200 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-8">
