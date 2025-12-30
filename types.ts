@@ -27,8 +27,12 @@ export interface MobileBundle {
 export interface SelectionState {
   internetId: string | null;
   tvId: string | null;
+  tv2Id: string | null;
   stbId: string | null;
   mobileLineCount: number;
-  prepaidDiscount: number;
-  addOnIds: string[]; // 추가된 필드: 선택된 부가서비스 ID 목록
+  prepaidInternet: number; // 인터넷 선납권
+  prepaidTv1: number;      // B tv 1 선납권
+  prepaidTv2: number;      // B tv 2 선납권
+  addOnIds: string[];
+  isFamilyPlan: boolean;
 }
