@@ -593,7 +593,7 @@ const App: React.FC = () => {
             <div className="flex items-center gap-6 md:gap-10 w-full md:w-auto justify-between md:justify-end">
               {customerQuotedFee > 0 && (
                 <div className="flex flex-col items-end">
-                  <div className="text-[10px] text-indigo-500 font-black mb-0.5">선납권추천(고객요금-선택요금)>선납>선i
+                  <div className="text-[10px] text-indigo-500 font-black mb-0.5">선납권추천(고객안내요금-선납요금)</div>
                   <div className="flex items-baseline gap-1">
                     <span className="text-2xl font-black text-indigo-600">{recommendedPrepaid.toLocaleString()}</span>
                     <span className="text-sm font-bold text-indigo-600">원</span>
