@@ -268,7 +268,8 @@ const App: React.FC = () => {
     }));
   };
 
-  const prepaidAmounts = Array.from({ length: 8 }, (_, i) => (i + 1) * 1000);
+  // 요청사항: 선납권 할인 1,100원~8,800원 (부가세 10% 포함)
+  const prepaidAmounts = Array.from({ length: 8 }, (_, i) => (i + 1) * 1100);
 
   return (
     <div className="min-h-screen pb-48">
@@ -487,8 +488,8 @@ const App: React.FC = () => {
             <SectionHeader title="선납권 할인을 선택하세요" step={5} />
             <div className="mb-6 bg-blue-50 p-4 rounded-2xl border border-blue-100">
               <p className="text-sm text-blue-700 leading-relaxed">
-                <span className="font-bold block mb-1">💡 선납권 주의 사항 </span>
-                골든, 레드 상품당 8000원까지 사용가능
+                <span className="font-bold block mb-1">💡 선납권 할인 안내</span>
+                인터넷 및 B tv 요금에서 추가 할인을 적용할 수 있는 권권입니다. 각 항목별로 중복 적용이 가능하며, 대구 및 서울 지역은 특별 혜택이 적용될 수 있습니다. (부가세 10% 포함된 금액이 노출됩니다.)
               </p>
             </div>
             <div className="bg-white p-8 rounded-3xl border border-gray-200 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -592,13 +593,13 @@ const App: React.FC = () => {
             <div className="flex items-center gap-6 md:gap-10 w-full md:w-auto justify-between md:justify-end">
               {customerQuotedFee > 0 && (
                 <div className="flex flex-col items-end">
-                  <div className="text-[10px] text-indigo-500 font-black mb-0.5">선납권 추천</div>
+                  <div className="text-[10px] text-indigo-500 font-black mb-0.5">선납권추천(고객요금-선택요금)>선납>선i
                   <div className="flex items-baseline gap-1">
                     <span className="text-2xl font-black text-indigo-600">{recommendedPrepaid.toLocaleString()}</span>
                     <span className="text-sm font-bold text-indigo-600">원</span>
                   </div>
                   <div className="text-[10px] text-red-500 font-bold mt-1">
-                    ※ 대구, 서울만 8,000원 사용가능
+                    ※ 대구, 서울만 8,800원 사용가능
                   </div>
                 </div>
               )}
