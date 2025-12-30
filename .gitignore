@@ -1,0 +1,16 @@
+
+# 라이브러리 폴더
+node_modules/
+
+# 빌드 결과물
+dist/
+
+# 환경 변수 및 개인 설정
+.env
+.env.local
+.DS_Store
+
+# 로그 파일
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
