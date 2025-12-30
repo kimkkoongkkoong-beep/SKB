@@ -223,7 +223,7 @@ const App: React.FC = () => {
 
   const handleMobileBundleClick = () => {
     if (selections.isFamilyPlan) {
-      alert("패밀리요금제 선택중입니다");
+      alert("패밀리요금제 선택중입니다. 패밀리 요금제는 휴대폰 결합과 중복 적용이 불가능합니다.");
       return;
     }
     setSelections(prev => ({ ...prev, mobileLineCount: 1 }));
@@ -270,6 +270,8 @@ const App: React.FC = () => {
 
   // 요청사항: 선납권 할인 1,100원~8,800원 (부가세 10% 포함)
   const prepaidAmounts = Array.from({ length: 8 }, (_, i) => (i + 1) * 1100);
+
+  const showWingsDiscountInfo = selections.addOnIds.includes('addon_wings') && selections.addOnIds.includes('addon_relief');
 
   return (
     <div className="min-h-screen pb-48">
@@ -355,6 +357,22 @@ const App: React.FC = () => {
                 </label>
               </div>
             </SectionHeader>
+
+            {selections.isFamilyPlan && (
+              <div className="mb-6 bg-blue-50 border border-blue-100 p-4 rounded-2xl animate-slide-up">
+                <h4 className="text-blue-800 font-bold text-sm mb-2 flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" /></svg>
+                  패밀리 요금제 가입 안내 (공식 기준)
+                </h4>
+                <ul className="text-xs text-blue-700 space-y-1.5 ml-7 list-disc">
+                  <li>타지역에 SK브로드밴드 인터넷을 사용 중인 가족(본인/배우자/직계존비속)이 있는 경우 가입 가능합니다.</li>
+                  <li>가입 시 가족관계를 증명할 수 있는 서류(가족관계증명서 등) 제출이 필수입니다.</li>
+                  <li className="font-bold text-red-600">휴대폰 결합 할인과 중복 적용이 불가능합니다.</li>
+                  <li>기존 고객이 패밀리로 변경 시 혜택이 상이할 수 있으니 센터 확인이 필요합니다.</li>
+                </ul>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {INTERNET_PLANS.map((plan) => (
                 <PlanCard 
@@ -371,6 +389,18 @@ const App: React.FC = () => {
 
           <section>
             <SectionHeader title="인터넷 부가서비스를 선택하세요" step="1-1" />
+            
+            {showWingsDiscountInfo && (
+              <div className="mb-6 bg-indigo-50 border border-indigo-100 p-4 rounded-2xl animate-slide-up flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center flex-shrink-0 text-white">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                </div>
+                <p className="text-sm text-indigo-800 font-medium">
+                  <span className="font-bold">윙즈+안심서비스 패키지 할인:</span> 윙즈와 안심서비스 동시 선택 시 윙즈 요금이 <span className="text-red-600 font-bold">1,100원</span>으로 자동 할인 적용됩니다.
+                </p>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {INTERNET_ADD_ONS.map((addon) => (
                 <PlanCard 
@@ -488,8 +518,8 @@ const App: React.FC = () => {
             <SectionHeader title="선납권 할인을 선택하세요" step={5} />
             <div className="mb-6 bg-blue-50 p-4 rounded-2xl border border-blue-100">
               <p className="text-sm text-blue-700 leading-relaxed">
-                <span className="font-bold block mb-1">💡 선납권 안내</span>
-                인터넷 골든,레드 8000원까지 사용가능합니다. (부가세 10% 포함된 금액이 노출됩니다.)
+                <span className="font-bold block mb-1">💡 선납권 할인 안내</span>
+                인터넷 및 B tv 요금에서 사용할 선납권을 선택해주세요. (부가세 10% 포함된 금액이 노출됩니다.)
               </p>
             </div>
             <div className="bg-white p-8 rounded-3xl border border-gray-200 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -558,7 +588,9 @@ const App: React.FC = () => {
                   </>
                 )}
                 {isTv2Selected && (
-                  <span className="bg-orange-50 text-orange-600 px-2 py-0.5 rounded border border-orange-100 font-bold">TV 2대</span>
+                  <span className="bg-orange-50 text-orange-600 px-2 py-0.5 rounded border border-orange-100 font-bold">
+                    {TV_PLANS.find(p => p.id === selections.tv2Id)?.name}(Smart 3)
+                  </span>
                 )}
               </div>
               <div className="flex flex-wrap gap-2 mt-1">
@@ -593,7 +625,7 @@ const App: React.FC = () => {
             <div className="flex items-center gap-6 md:gap-10 w-full md:w-auto justify-between md:justify-end">
               {customerQuotedFee > 0 && (
                 <div className="flex flex-col items-end">
-                  <div className="text-[10px] text-indigo-500 font-black mb-0.5">선납권추천(고객안내요금-선납요금)</div>
+                  <div className="text-[10px] text-indigo-500 font-black mb-0.5">선납권(입력요금-선택요금) 추천</div>
                   <div className="flex items-baseline gap-1">
                     <span className="text-2xl font-black text-indigo-600">{recommendedPrepaid.toLocaleString()}</span>
                     <span className="text-sm font-bold text-indigo-600">원</span>
