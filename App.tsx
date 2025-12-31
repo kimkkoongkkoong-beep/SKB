@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   INTERNET_PLANS, 
@@ -15,13 +16,11 @@ const CATV_TV_PLANS = [
   { id: 'pop_230', name: 'B tv pop 230', price: 9900, channels: 230, description: '전 채널을 시청하는 프리미엄 케이블' },
 ];
 
-// CATV 전용 셋톱박스 데이터 (기본 임대료)
 const CATV_STB_OPTIONS = [
   { id: 'stb_smart3_pop', name: 'Smart 3_POP', price: 2200, description: 'pop 전용 스마트 셋톱박스' },
   { id: 'stb_ai2_pop', name: 'AI2_POP', price: 4400, description: '누구(NUGU) 탑재 pop 전용 AI 셋톱박스' },
 ];
 
-// B tv 2 전용 요금제 맵 (IPTV용)
 const B_TV_2_PRICES: Record<string, number> = {
   'tv_lite': 6050,
   'tv_standard': 7700,
@@ -30,7 +29,6 @@ const B_TV_2_PRICES: Record<string, number> = {
   'tv_none': 0
 };
 
-// B tv 2 전용 요금제 맵 (CATV/pop용)
 const B_TV_2_POP_PRICES: Record<string, number> = {
   'pop_100': 3850,
   'pop_180': 5500,
@@ -101,6 +99,7 @@ const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [password, setPassword] = useState<string>('');
   const [loginError, setLoginError] = useState<string>('');
+  const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
 
   const [tvType, setTvType] = useState<'IPTV' | 'CATV'>('IPTV');
   const [selections, setSelections] = useState<SelectionState>({
@@ -129,29 +128,17 @@ const App: React.FC = () => {
     }
   };
 
-  // TV 타입 변경 시 요금제 및 셋톱박스 초기화
   useEffect(() => {
     if (tvType === 'CATV') {
-      setSelections(prev => ({
-        ...prev,
-        tvId: 'pop_100',
-        tv2Id: 'tv_none',
-        stbId: 'stb_smart3_pop'
-      }));
+      setSelections(prev => ({ ...prev, tvId: 'pop_100', tv2Id: 'tv_none', stbId: 'stb_smart3_pop' }));
     } else {
-      setSelections(prev => ({
-        ...prev,
-        tvId: 'tv_lite',
-        tv2Id: 'tv_none',
-        stbId: 'stb_smart3'
-      }));
+      setSelections(prev => ({ ...prev, tvId: 'tv_lite', tv2Id: 'tv_none', stbId: 'stb_smart3' }));
     }
   }, [tvType]);
 
   const { totalPrice, discountBreakdown, isTvSelected, isTv2Selected, currentAddOns } = useMemo(() => {
     let base = 0;
     const internet = INTERNET_PLANS.find(p => p.id === selections.internetId);
-    
     const currentTvPlans = tvType === 'IPTV' ? TV_PLANS : CATV_TV_PLANS;
     const currentStbOptions = tvType === 'IPTV' ? STB_OPTIONS : CATV_STB_OPTIONS;
     const currentBtv2Prices = tvType === 'IPTV' ? B_TV_2_PRICES : B_TV_2_POP_PRICES;
@@ -173,10 +160,8 @@ const App: React.FC = () => {
         else if (internet.id === 'int_1g') familyDiscount = 11000;
       }
     }
-    
     base += internetPrice;
 
-    // STB 임대료 계산 (AI2_POP 및 Smart 3_POP 가변 로직)
     let currentEffectiveStbPrice = stb ? stb.price : 0;
     if (tvType === 'CATV') {
       if (selections.stbId === 'stb_ai2_pop') {
@@ -203,143 +188,77 @@ const App: React.FC = () => {
 
     const isWingsSelected = selections.addOnIds.includes('addon_wings');
     const isReliefSelected = selections.addOnIds.includes('addon_relief');
-    
     let addOnPrice = 0;
-    if (isWingsSelected && isReliefSelected) {
-      addOnPrice = 1100 + 2200;
-    } else {
+    if (isWingsSelected && isReliefSelected) addOnPrice = 1100 + 2200;
+    else {
       if (isWingsSelected) addOnPrice += 1650;
       if (isReliefSelected) addOnPrice += 2200;
     }
     base += addOnPrice;
 
     const totalPrepaid = selections.prepaidInternet + selections.prepaidTv1 + selections.prepaidTv2;
+    const breakdown = { bundle: 0, mobile: 0, prepaid: totalPrepaid, stb: 0, stbName: '', family: familyDiscount };
 
-    const breakdown = {
-      bundle: 0,
-      mobile: 0,
-      prepaid: totalPrepaid,
-      stb: 0,
-      stbName: '',
-      family: familyDiscount
-    };
-
-    // IPTV 전용 STB 프로모션 할인
     if (tvType === 'IPTV' && hasTv && stb) {
-      if (stb.id === 'stb_ai2') {
-        if (tv!.id === 'tv_all' || tv!.id === 'tv_all_plus') {
-          breakdown.stb = 2200;
-          breakdown.stbName = 'AI 2';
-        }
-      } else if (stb.id === 'stb_ai4v') {
-        if (tv!.id === 'tv_all') {
-          breakdown.stb = 2200;
-          breakdown.stbName = 'AI 4 VISION';
-        } else if (tv!.id === 'tv_all_plus') {
-          breakdown.stb = 4400;
-          breakdown.stbName = 'AI 4 VISION';
-        }
+      if (stb.id === 'stb_ai2' && (tv!.id === 'tv_all' || tv!.id === 'tv_all_plus')) breakdown.stb = 2200;
+      else if (stb.id === 'stb_ai4v') {
+        if (tv!.id === 'tv_all') breakdown.stb = 2200;
+        else if (tv!.id === 'tv_all_plus') breakdown.stb = 4400;
       }
     }
 
     if (internet && (hasTv || hasTv2) && selections.mobileLineCount === 0 && !selections.isFamilyPlan) {
-      if (internet.id === 'int_100m') {
-        breakdown.bundle = 1100;
-      } else if (internet.id === 'int_500m' || internet.id === 'int_1g') {
-        breakdown.bundle = 5500;
-      }
+      if (internet.id === 'int_100m') breakdown.bundle = 1100;
+      else breakdown.bundle = 5500;
     }
 
     if (selections.mobileLineCount > 0 && !selections.isFamilyPlan) {
-      if ((hasTv || hasTv2) && tvType !== 'CATV') {
-        breakdown.mobile += MOBILE_COMBINATION_DISCOUNTS.TV;
-      }
-      if (internet) {
-        const internetDiscount = (MOBILE_COMBINATION_DISCOUNTS.INTERNET as any)[internet.id] || 0;
-        breakdown.mobile += internetDiscount;
-      }
+      if ((hasTv || hasTv2) && tvType !== 'CATV') breakdown.mobile += MOBILE_COMBINATION_DISCOUNTS.TV;
+      if (internet) breakdown.mobile += (MOBILE_COMBINATION_DISCOUNTS.INTERNET as any)[internet.id] || 0;
     }
 
-    const finalPrice = Math.max(0, base - breakdown.bundle - breakdown.mobile - breakdown.prepaid - breakdown.stb - breakdown.family);
-
     return { 
-      totalPrice: finalPrice, 
+      totalPrice: Math.max(0, base - breakdown.bundle - breakdown.mobile - breakdown.prepaid - breakdown.stb - breakdown.family), 
       discountBreakdown: breakdown,
       isTvSelected: hasTv,
       isTv2Selected: hasTv2,
-      currentAddOns: selections.addOnIds.map(id => INTERNET_ADD_ONS.find(a => a.id === id)?.name).filter(Boolean)
+      currentAddOns: selections.addOnIds.map(id => INTERNET_ADD_ONS.find(a => a.id === id)?.name).filter(Boolean) as string[]
     };
   }, [selections, tvType]);
 
-  const recommendedPrepaid = useMemo(() => {
-    if (customerQuotedFee <= 0) return 0;
-    return Math.max(0, totalPrice - customerQuotedFee);
-  }, [totalPrice, customerQuotedFee]);
+  const recommendedPrepaid = useMemo(() => customerQuotedFee <= 0 ? 0 : Math.max(0, totalPrice - customerQuotedFee), [totalPrice, customerQuotedFee]);
 
   const toggleAddOn = (id: string) => {
     setSelections(prev => {
       const isSelected = prev.addOnIds.includes(id);
-      return {
-        ...prev,
-        addOnIds: isSelected 
-          ? prev.addOnIds.filter(item => item !== id)
-          : [...prev.addOnIds, id]
-      };
+      return { ...prev, addOnIds: isSelected ? prev.addOnIds.filter(item => item !== id) : [...prev.addOnIds, id] };
     });
   };
 
-  const handleMobileBundleClick = () => {
-    if (selections.isFamilyPlan) {
-      alert("패밀리요금제 선택중입니다. 패밀리 요금제는 휴대폰 결합과 중복 적용이 불가능합니다.");
-      return;
-    }
-    setSelections(prev => ({ ...prev, mobileLineCount: 1 }));
-  };
+  const shareSummaryText = useMemo(() => {
+    const internet = INTERNET_PLANS.find(p => p.id === selections.internetId);
+    const tv1 = (tvType === 'IPTV' ? TV_PLANS : CATV_TV_PLANS).find(p => p.id === selections.tvId);
+    const stb = (tvType === 'IPTV' ? STB_OPTIONS : CATV_STB_OPTIONS).find(s => s.id === selections.stbId);
+    const tv2 = (tvType === 'IPTV' ? TV_PLANS : CATV_TV_PLANS).find(p => p.id === selections.tv2Id);
 
-  const applyGiga1Package = () => {
-    setTvType('IPTV');
-    setSelections(prev => ({
-      ...prev,
-      internetId: 'int_1g',
-      tvId: 'tv_all_plus',
-      tv2Id: 'tv_none',
-      stbId: 'stb_smart3',
-      addOnIds: ['addon_relief'],
-      isFamilyPlan: false,
-      mobileLineCount: 0
-    }));
-  };
+    return `[SKB 업셀 내역서]
+타입: ${tvType}
+인터넷: ${internet?.name} (${internet?.speed})
+TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
+TV 2: ${tv2 ? `${tv2.name} (Smart 3)` : '없음'}
+부가서비스: ${currentAddOns.length > 0 ? currentAddOns.join(', ') : '없음'}
+결합상태: ${selections.isFamilyPlan ? '패밀리결합' : selections.mobileLineCount > 0 ? '휴대폰결합' : '없음'}
+선납권 적용: ${discountBreakdown.prepaid.toLocaleString()}원
 
-  const applyGira1Package = () => {
-    setTvType('IPTV');
-    setSelections(prev => ({
-      ...prev,
-      internetId: 'int_500m',
-      tvId: 'tv_all_plus',
-      tv2Id: 'tv_none',
-      stbId: 'stb_smart3',
-      addOnIds: ['addon_relief'],
-      isFamilyPlan: false,
-      mobileLineCount: 0
-    }));
-  };
+▶ 월 예상 납부액: ${totalPrice.toLocaleString()}원
+▶ 선납권 추천: ${recommendedPrepaid.toLocaleString()}원`;
+  }, [selections, tvType, currentAddOns, totalPrice, recommendedPrepaid, discountBreakdown]);
 
-  const applyGira2Package = () => {
-    setTvType('IPTV');
-    setSelections(prev => ({
-      ...prev,
-      internetId: 'int_500m',
-      tvId: 'tv_all',
-      tv2Id: 'tv_none',
-      stbId: 'stb_smart3',
-      addOnIds: ['addon_relief'],
-      isFamilyPlan: false,
-      mobileLineCount: 0
-    }));
+  const handleCopyText = () => {
+    navigator.clipboard.writeText(shareSummaryText);
+    alert('설계 내역이 복사되었습니다.');
+    setIsShareModalOpen(false);
   };
-
-  const prepaidAmounts = Array.from({ length: 8 }, (_, i) => (i + 1) * 1100);
-  const showWingsDiscountInfo = selections.addOnIds.includes('addon_wings') && selections.addOnIds.includes('addon_relief');
 
   if (!isAuthenticated) {
     return (
@@ -353,36 +272,15 @@ const App: React.FC = () => {
               <h1 className="text-white text-2xl font-black tracking-tight">SKB 업셀 계산기</h1>
               <p className="text-violet-100 mt-2 text-sm font-medium">지정된 사용자만 사용 가능합니다.</p>
             </div>
-            
             <form onSubmit={handleLogin} className="p-8 space-y-6">
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">비밀번호 입력</label>
-                <input
-                  autoFocus
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Password"
-                  className={`w-full bg-slate-50 border-2 rounded-2xl px-5 py-4 font-bold text-slate-800 transition-all outline-none text-center tracking-[0.5em] focus:bg-white ${
-                    loginError ? 'border-red-200 focus:border-red-500 bg-red-50' : 'border-slate-100 focus:border-violet-500'
-                  }`}
-                />
-                {loginError && (
-                  <p className="text-red-500 text-xs font-bold text-center mt-2 animate-bounce">{loginError}</p>
-                )}
+                <input autoFocus type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password"
+                  className={`w-full bg-slate-50 border-2 rounded-2xl px-5 py-4 font-bold text-slate-800 transition-all outline-none text-center tracking-[0.5em] focus:bg-white ${loginError ? 'border-red-200 bg-red-50' : 'border-slate-100 focus:border-violet-500'}`}/>
+                {loginError && <p className="text-red-500 text-xs font-bold text-center mt-2 animate-bounce">{loginError}</p>}
               </div>
-              
-              <button
-                type="submit"
-                className="w-full bg-violet-600 hover:bg-violet-700 text-white font-black py-4 px-6 rounded-2xl shadow-lg shadow-violet-200 transition-all active:scale-95 text-lg"
-              >
-                접속하기
-              </button>
+              <button type="submit" className="w-full bg-violet-600 hover:bg-violet-700 text-white font-black py-4 px-6 rounded-2xl shadow-lg shadow-violet-200 transition-all active:scale-95 text-lg">접속하기</button>
             </form>
-            
-            <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-center">
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Authorized Personnel Only</span>
-            </div>
           </div>
         </div>
       </div>
@@ -394,383 +292,201 @@ const App: React.FC = () => {
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 py-4 flex justify-between items-center">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-violet-600 rounded flex items-center justify-center shadow-sm">
-              <span className="text-white font-black text-xs">SK</span>
-            </div>
-            <h1 className="text-lg font-bold tracking-tight text-slate-800 flex flex-wrap items-center">
-              SKB업셀 계산기
-              <span className="ml-2 text-xs md:text-sm font-medium text-violet-500">(지정 사용자 전용)</span>
-            </h1>
+            <div className="w-8 h-8 bg-violet-600 rounded flex items-center justify-center shadow-sm"><span className="text-white font-black text-xs">SK</span></div>
+            <h1 className="text-lg font-bold tracking-tight text-slate-800 flex flex-wrap items-center">SKB업셀 계산기<span className="ml-2 text-xs md:text-sm font-medium text-violet-500">(지정 사용자 전용)</span></h1>
           </div>
-          <button 
-            onClick={() => setIsAuthenticated(false)}
-            className="text-[10px] font-bold text-slate-400 hover:text-red-500 transition-colors uppercase tracking-widest"
-          >
-            Logout
-          </button>
+          <button onClick={() => setIsAuthenticated(false)} className="text-[10px] font-bold text-slate-400 hover:text-red-500 transition-colors uppercase tracking-widest">Logout</button>
         </div>
       </header>
 
       <main className="max-w-5xl mx-auto px-4 pt-8">
         <div className="space-y-12">
+          {/* 업셀링 빠른선택 */}
           <section className="bg-gradient-to-br from-violet-50 to-white p-6 rounded-3xl border border-violet-100 shadow-sm">
             <SectionHeader title="업셀링 빠른선택" step="0" badge="Recommended">
               <div className="flex flex-col sm:flex-row items-center gap-4 bg-white/80 backdrop-blur-sm px-4 py-2 rounded-xl border border-violet-200 shadow-sm w-full md:w-auto">
                 <div className="flex items-center bg-slate-100 p-1 rounded-lg">
-                  <button
-                    onClick={() => setTvType('IPTV')}
-                    className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${
-                      tvType === 'IPTV' 
-                        ? 'bg-violet-600 text-white shadow-sm' 
-                        : 'text-slate-500 hover:text-slate-700'
-                    }`}
-                  >
-                    IPTV
-                  </button>
-                  <button
-                    onClick={() => setTvType('CATV')}
-                    className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${
-                      tvType === 'CATV' 
-                        ? 'bg-violet-600 text-white shadow-sm' 
-                        : 'text-slate-500 hover:text-slate-700'
-                    }`}
-                  >
-                    CATV
-                  </button>
+                  <button onClick={() => setTvType('IPTV')} className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${tvType === 'IPTV' ? 'bg-violet-600 text-white shadow-sm' : 'text-slate-500'}`}>IPTV</button>
+                  <button onClick={() => setTvType('CATV')} className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${tvType === 'CATV' ? 'bg-violet-600 text-white shadow-sm' : 'text-slate-500'}`}>CATV</button>
                 </div>
-                
                 <div className="flex items-center gap-3 w-full sm:w-auto border-l sm:border-l border-slate-200 sm:pl-4">
                   <label htmlFor="quote" className="text-sm font-bold text-slate-700 whitespace-nowrap">고객안내요금</label>
                   <div className="relative flex-grow sm:flex-grow-0">
-                    <input 
-                      type="number" 
-                      id="quote"
-                      placeholder="0"
-                      value={customerQuotedFee || ''}
-                      onChange={(e) => setCustomerQuotedFee(Number(e.target.value))}
-                      className="w-full md:w-40 bg-slate-50 border-2 border-slate-100 rounded-lg px-3 py-1.5 text-right font-bold text-violet-600 focus:outline-none focus:border-violet-500 transition-all"
-                    />
+                    <input type="number" id="quote" placeholder="0" value={customerQuotedFee || ''} onChange={(e) => setCustomerQuotedFee(Number(e.target.value))} className="w-full md:w-40 bg-slate-50 border-2 border-slate-100 rounded-lg px-3 py-1.5 text-right font-bold text-violet-600 focus:outline-none focus:border-violet-500 transition-all"/>
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold pointer-events-none">원</span>
                   </div>
                 </div>
               </div>
             </SectionHeader>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <PlanCard 
-                selected={selections.internetId === 'int_500m' && selections.tvId === 'tv_all_plus' && tvType === 'IPTV'}
-                onClick={applyGira1Package}
-                title="기라_1"
-                description="500M + 안심 + 올플 (IPTV)"
-                className="bg-white/80"
-              />
-              <PlanCard 
-                selected={selections.internetId === 'int_500m' && selections.tvId === 'tv_all' && tvType === 'IPTV'}
-                onClick={applyGira2Package}
-                title="기라_2"
-                description="500M + 안심 + 올 (IPTV)"
-                className="bg-white/80"
-              />
-              <PlanCard 
-                selected={selections.internetId === 'int_1g' && selections.tvId === 'tv_all_plus' && tvType === 'IPTV'}
-                onClick={applyGiga1Package}
-                title="기가_1"
-                description="1G + 안심 + 올플 (IPTV)"
-                className="bg-white/80"
-              />
+              <PlanCard selected={selections.internetId === 'int_500m' && selections.tvId === 'tv_all_plus' && tvType === 'IPTV'} onClick={() => { setTvType('IPTV'); setSelections(prev => ({ ...prev, internetId: 'int_500m', tvId: 'tv_all_plus', tv2Id: 'tv_none', stbId: 'stb_smart3', addOnIds: ['addon_relief'], isFamilyPlan: false, mobileLineCount: 0 })); }} title="기라_1" description="500M + 안심 + 올플 (IPTV)" className="bg-white/80"/>
+              <PlanCard selected={selections.internetId === 'int_500m' && selections.tvId === 'tv_all' && tvType === 'IPTV'} onClick={() => { setTvType('IPTV'); setSelections(prev => ({ ...prev, internetId: 'int_500m', tvId: 'tv_all', tv2Id: 'tv_none', stbId: 'stb_smart3', addOnIds: ['addon_relief'], isFamilyPlan: false, mobileLineCount: 0 })); }} title="기라_2" description="500M + 안심 + 올 (IPTV)" className="bg-white/80"/>
+              <PlanCard selected={selections.internetId === 'int_1g' && selections.tvId === 'tv_all_plus' && tvType === 'IPTV'} onClick={() => { setTvType('IPTV'); setSelections(prev => ({ ...prev, internetId: 'int_1g', tvId: 'tv_all_plus', tv2Id: 'tv_none', stbId: 'stb_smart3', addOnIds: ['addon_relief'], isFamilyPlan: false, mobileLineCount: 0 })); }} title="기가_1" description="1G + 안심 + 올플 (IPTV)" className="bg-white/80"/>
             </div>
           </section>
 
+          {/* 인터넷 속도 */}
           <section>
-            <SectionHeader title="인터넷 속도를 선택하세요" step={1}>
+            <SectionHeader title="인터넷 속도" step={1}>
               <div className="flex items-center gap-3 bg-white border border-slate-200 px-4 py-2 rounded-2xl hover:border-violet-300 transition-colors shadow-sm">
                 <span className="text-sm font-bold text-slate-700">패밀리 요금제</span>
                 <label className="relative inline-flex items-center cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    className="sr-only peer" 
-                    checked={selections.isFamilyPlan}
-                    onChange={(e) => {
-                      const isChecked = e.target.checked;
-                      setSelections(prev => ({ 
-                        ...prev, 
-                        isFamilyPlan: isChecked,
-                        mobileLineCount: isChecked ? 0 : prev.mobileLineCount
-                      }));
-                    }}
-                  />
+                  <input type="checkbox" className="sr-only peer" checked={selections.isFamilyPlan} onChange={(e) => setSelections(prev => ({ ...prev, isFamilyPlan: e.target.checked, mobileLineCount: e.target.checked ? 0 : prev.mobileLineCount }))}/>
                   <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600"></div>
                 </label>
               </div>
             </SectionHeader>
-
-            {selections.isFamilyPlan && (
-              <div className="mb-6 bg-violet-50 border border-violet-100 p-4 rounded-2xl animate-slide-up shadow-sm">
-                <h4 className="text-violet-800 font-bold text-sm mb-3 flex items-center gap-2">
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" /></svg>
-                  패밀리 요금제 가입 안내 (공식 기준)
-                </h4>
-                <ul className="text-xs text-violet-700 space-y-2 ml-7 list-disc font-medium leading-relaxed">
-                  <li>타지역에 SK브로드밴드 인터넷을 사용 중인 가족(본인/배우자/직계존비속)이 있는 경우 가입 가능합니다.</li>
-                  <li>가입 시 가족관계를 증명할 수 있는 서류(가족관계증명서 등) 제출이 필수입니다.</li>
-                  <li className="font-bold text-violet-900 bg-violet-100/50 px-1 rounded">휴대폰 결합 할인과 중복 적용이 불가능합니다.</li>
-                  <li>기존 고객이 패밀리로 변경 시 혜택이 상이할 수 있으니 센터 확인이 필요합니다.</li>
-                </ul>
-              </div>
-            )}
-
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {INTERNET_PLANS.map((plan) => (
-                <PlanCard 
-                  key={plan.id}
-                  selected={selections.internetId === plan.id}
-                  onClick={() => setSelections(prev => ({ ...prev, internetId: plan.id }))}
-                  title={`${plan.name} (${plan.speed})`}
-                  price={plan.price}
-                  description={plan.description}
-                />
+                <PlanCard key={plan.id} selected={selections.internetId === plan.id} onClick={() => setSelections(prev => ({ ...prev, internetId: plan.id }))} title={`${plan.name} (${plan.speed})`} price={plan.price} description={plan.description}/>
               ))}
             </div>
           </section>
 
+          {/* 부가서비스 */}
           <section>
             <SectionHeader title="인터넷 부가서비스" step="1-1" />
-            {showWingsDiscountInfo && (
-              <div className="mb-6 bg-fuchsia-50 border border-fuchsia-100 p-4 rounded-2xl animate-slide-up flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-fuchsia-600 flex items-center justify-center flex-shrink-0 text-white shadow-sm">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                </div>
-                <p className="text-sm text-fuchsia-800 font-medium">
-                  <span className="font-bold">패키지 할인:</span> 윙즈+안심서비스 동시 선택 시 윙즈 요금이 <span className="text-fuchsia-900 font-bold">1,100원</span>으로 할인됩니다.
-                </p>
-              </div>
-            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {INTERNET_ADD_ONS.map((addon) => (
-                <PlanCard 
-                  key={addon.id}
-                  selected={selections.addOnIds.includes(addon.id)}
-                  onClick={() => toggleAddOn(addon.id)}
-                  title={addon.name}
-                  price={addon.price}
-                  description={addon.description}
-                />
+                <PlanCard key={addon.id} selected={selections.addOnIds.includes(addon.id)} onClick={() => toggleAddOn(addon.id)} title={addon.name} price={addon.price} description={addon.description}/>
               ))}
             </div>
           </section>
 
+          {/* TV 요금제 */}
           <section>
             <SectionHeader title={`${tvType} 요금제`} step={2} />
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-              <PlanCard 
-                selected={selections.tvId === 'tv_none'}
-                onClick={() => setSelections(prev => ({ ...prev, tvId: 'tv_none' }))}
-                title="선택 안함"
-                price={0}
-                description="메인 TV를 신청하지 않습니다."
-              />
+              <PlanCard selected={selections.tvId === 'tv_none'} onClick={() => setSelections(prev => ({ ...prev, tvId: 'tv_none' }))} title="선택 안함" price={0} description="메인 TV를 신청하지 않습니다."/>
               {(tvType === 'IPTV' ? TV_PLANS : CATV_TV_PLANS).map((plan) => (
-                <PlanCard 
-                  key={plan.id}
-                  selected={selections.tvId === plan.id}
-                  onClick={() => setSelections(prev => ({ ...prev, tvId: plan.id }))}
-                  title={`${plan.name} (${plan.channels}채널)`}
-                  price={plan.price}
-                  description={plan.description}
-                />
+                <PlanCard key={plan.id} selected={selections.tvId === plan.id} onClick={() => setSelections(prev => ({ ...prev, tvId: plan.id }))} title={`${plan.name} (${plan.channels}채널)`} price={plan.price} description={plan.description}/>
               ))}
             </div>
           </section>
 
           {isTvSelected && (
             <section className="animate-slide-up">
-              <SectionHeader title={`메인 TV ${tvType} 셋톱박스`} step="2-1" />
+              <SectionHeader title="셋톱박스" step="2-1" />
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 {(tvType === 'IPTV' ? STB_OPTIONS : CATV_STB_OPTIONS).map((stb) => {
-                  let displayPrice = stb.price;
+                  let dPrice = stb.price;
                   if (tvType === 'CATV') {
-                    if (stb.id === 'stb_ai2_pop') {
-                      if (selections.tvId === 'pop_230') displayPrice = 0;
-                      else if (selections.tvId === 'pop_180') displayPrice = 1100;
-                      else if (selections.tvId === 'pop_100') displayPrice = 2200;
-                    } else if (stb.id === 'stb_smart3_pop') {
-                      if (selections.tvId === 'pop_230') displayPrice = 2200;
-                      else if (selections.tvId === 'pop_180') displayPrice = 3300;
-                      else if (selections.tvId === 'pop_100') displayPrice = 3300;
-                    }
+                    if (stb.id === 'stb_ai2_pop') dPrice = selections.tvId === 'pop_230' ? 0 : selections.tvId === 'pop_180' ? 1100 : 2200;
+                    else if (stb.id === 'stb_smart3_pop') dPrice = selections.tvId === 'pop_230' ? 2200 : 3300;
                   }
-
-                  return (
-                    <PlanCard 
-                      key={stb.id}
-                      selected={selections.stbId === stb.id}
-                      onClick={() => setSelections(prev => ({ ...prev, stbId: stb.id }))}
-                      title={stb.name}
-                      price={displayPrice}
-                      description={stb.description}
-                    />
-                  );
+                  return <PlanCard key={stb.id} selected={selections.stbId === stb.id} onClick={() => setSelections(prev => ({ ...prev, stbId: stb.id }))} title={stb.name} price={dPrice} description={stb.description}/>;
                 })}
               </div>
             </section>
           )}
 
           <section>
-            <SectionHeader title={`${tvType} 2 요금제 (추가 TV)`} step={3} />
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-              <PlanCard 
-                selected={selections.tv2Id === 'tv_none'}
-                onClick={() => setSelections(prev => ({ ...prev, tv2Id: 'tv_none' }))}
-                title="선택 안함"
-                price={0}
-                description="추가 TV를 사용하지 않습니다."
-              />
-              {(tvType === 'IPTV' ? TV_PLANS : CATV_TV_PLANS).map((plan) => (
-                <PlanCard 
-                  key={plan.id}
-                  selected={selections.tv2Id === plan.id}
-                  onClick={() => setSelections(prev => ({ ...prev, tv2Id: plan.id }))}
-                  title={plan.name}
-                  price={(tvType === 'IPTV' ? B_TV_2_PRICES : B_TV_2_POP_PRICES)[plan.id]}
-                  description={tvType === 'IPTV' ? "Smart 3 고정" : "Smart 3_POP 고정"}
-                />
-              ))}
-            </div>
-          </section>
-
-          <section>
-            <SectionHeader title="휴대폰 결합" step={4} />
-            <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                <div>
-                  <h3 className="text-lg font-bold mb-2 text-slate-800">SKT 휴대폰 결합</h3>
-                  <p className="text-sm text-slate-500">가족의 휴대폰 회선 결합 유무를 선택하세요. (요즘가족결합 기준)</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setSelections(prev => ({ ...prev, mobileLineCount: 0 }))}
-                    className={`px-6 py-3 rounded-xl border-2 font-bold transition-all ${
-                      selections.mobileLineCount === 0
-                        ? 'bg-slate-100 border-slate-200 text-slate-700'
-                        : 'bg-white border-slate-200 text-slate-400 hover:border-violet-200'
-                    }`}
-                  >
-                    결합 안함
-                  </button>
-                  <button
-                    onClick={handleMobileBundleClick}
-                    className={`px-6 py-3 rounded-xl border-2 font-bold transition-all ${
-                      selections.mobileLineCount >= 1
-                        ? 'bg-violet-600 border-violet-600 text-white shadow-md'
-                        : 'bg-white border-slate-200 text-slate-400 hover:border-violet-400'
-                    }`}
-                  >
-                    휴대폰 결합
-                  </button>
-                </div>
+            <SectionHeader title="휴대폰 결합" step={3} />
+            <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div><h3 className="text-lg font-bold mb-2 text-slate-800">SKT 휴대폰 결합</h3><p className="text-sm text-slate-500">가족 휴대폰 회선 결합 유무 (요즘가족결합 기준)</p></div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setSelections(prev => ({ ...prev, mobileLineCount: 0 }))} className={`px-6 py-3 rounded-xl border-2 font-bold transition-all ${selections.mobileLineCount === 0 ? 'bg-slate-100 border-slate-200 text-slate-700' : 'bg-white border-slate-200 text-slate-400 hover:border-violet-200'}`}>결합 안함</button>
+                <button onClick={() => { if (selections.isFamilyPlan) { alert("패밀리요금제는 휴대폰 결합이 불가능합니다."); return; } setSelections(prev => ({ ...prev, mobileLineCount: 1 })); }} className={`px-6 py-3 rounded-xl border-2 font-bold transition-all ${selections.mobileLineCount >= 1 ? 'bg-violet-600 border-violet-600 text-white shadow-md' : 'bg-white border-slate-200 text-slate-400 hover:border-violet-400'}`}>휴대폰 결합</button>
               </div>
             </div>
           </section>
 
+          {/* 선납권 할인 */}
           <section className="pb-10">
-            <SectionHeader title="선납권 할인" step={5} />
+            <SectionHeader title="선납권 할인" step={4} />
             <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-8">
-              <div className="space-y-4">
-                <label className="block font-bold text-slate-700 text-sm">인터넷 선납권</label>
-                <select
-                  value={selections.prepaidInternet}
-                  onChange={(e) => setSelections(prev => ({ ...prev, prepaidInternet: Number(e.target.value) }))}
-                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors cursor-pointer"
-                >
-                  <option value={0}>할인 없음</option>
-                  {prepaidAmounts.map(val => (
-                    <option key={val} value={val}>-{val.toLocaleString()}원 할인</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-4">
-                <label className="block font-bold text-slate-700 text-sm">B tv 1 선납권</label>
-                <select
-                  value={selections.prepaidTv1}
-                  onChange={(e) => setSelections(prev => ({ ...prev, prepaidTv1: Number(e.target.value) }))}
-                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors cursor-pointer"
-                >
-                  <option value={0}>할인 없음</option>
-                  {prepaidAmounts.map(val => (
-                    <option key={val} value={val}>-{val.toLocaleString()}원 할인</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-4">
-                <label className="block font-bold text-slate-700 text-sm">B tv 2 선납권</label>
-                <select
-                  value={selections.prepaidTv2}
-                  onChange={(e) => setSelections(prev => ({ ...prev, prepaidTv2: Number(e.target.value) }))}
-                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-colors cursor-pointer"
-                >
-                  <option value={0}>할인 없음</option>
-                  {prepaidAmounts.map(val => (
-                    <option key={val} value={val}>-{val.toLocaleString()}원 할인</option>
-                  ))}
-                </select>
-              </div>
+              {['prepaidInternet', 'prepaidTv1', 'prepaidTv2'].map((key, idx) => (
+                <div key={key} className="space-y-4">
+                  <label className="block font-bold text-slate-700 text-sm">{idx === 0 ? '인터넷' : `B tv ${idx}`} 선납권</label>
+                  <select value={(selections as any)[key]} onChange={(e) => setSelections(prev => ({ ...prev, [key]: Number(e.target.value) }))} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold text-slate-800 outline-none focus:border-violet-500 cursor-pointer">
+                    <option value={0}>할인 없음</option>
+                    {Array.from({ length: 12 }, (_, i) => (i + 1) * 1100).map(val => <option key={val} value={val}>-{val.toLocaleString()}원 할인</option>)}
+                  </select>
+                </div>
+              ))}
             </div>
           </section>
         </div>
       </main>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-[0_-12px_40px_rgba(0,0,0,0.08)] z-50 backdrop-blur-md bg-white/95">
+      {/* 하단 바 */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-[0_-12px_40px_rgba(0,0,0,0.08)] z-40 backdrop-blur-md bg-white/95">
         <div className="max-w-5xl mx-auto px-4 py-4 md:py-6">
           <div className="flex flex-col md:flex-row items-end md:items-center justify-between gap-4">
             <div className="flex flex-col gap-1 w-full md:w-auto">
-               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-medium text-slate-500">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-medium text-slate-500">
                 <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-700 border border-slate-200">{INTERNET_PLANS.find(p => p.id === selections.internetId)?.name}</span>
                 {selections.isFamilyPlan && <span className="bg-violet-50 text-violet-700 px-2 py-0.5 rounded border border-violet-100 font-bold">패밀리</span>}
-                {currentAddOns.map(name => (
-                  <span key={name} className="bg-fuchsia-50 text-fuchsia-700 px-2 py-0.5 rounded border border-fuchsia-100">{name}</span>
-                ))}
-                {isTvSelected && (
-                  <>
-                    <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-700 border border-slate-200">{(tvType === 'IPTV' ? TV_PLANS : CATV_TV_PLANS).find(p => p.id === selections.tvId)?.name}</span>
-                    <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-700 border border-slate-200">{(tvType === 'IPTV' ? STB_OPTIONS : CATV_STB_OPTIONS).find(p => p.id === selections.stbId)?.name}</span>
-                  </>
-                )}
-                {isTv2Selected && (
-                  <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded border border-amber-100 font-bold">
-                    {(tvType === 'IPTV' ? TV_PLANS : CATV_TV_PLANS).find(p => p.id === selections.tv2Id)?.name} (2nd)
-                  </span>
-                )}
-                <span className="bg-violet-600 text-white px-2 py-0.5 rounded font-black text-[10px] tracking-tighter uppercase">{tvType}</span>
+                {isTvSelected && <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-700 border border-slate-200">{(tvType === 'IPTV' ? TV_PLANS : CATV_TV_PLANS).find(p => p.id === selections.tvId)?.name}</span>}
+                <span className="bg-violet-600 text-white px-2 py-0.5 rounded font-black text-[10px] uppercase">{tvType}</span>
               </div>
               <div className="flex flex-wrap gap-2 mt-1">
-                {discountBreakdown.bundle > 0 && <div className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">결합할인 -{discountBreakdown.bundle.toLocaleString()}</div>}
-                {discountBreakdown.family > 0 && <div className="text-[10px] text-violet-600 font-bold bg-violet-50 px-2 py-0.5 rounded border border-violet-100">패밀리 -{discountBreakdown.family.toLocaleString()}</div>}
-                {discountBreakdown.mobile > 0 && <div className="text-[10px] text-violet-600 font-bold bg-violet-100 px-2 py-0.5 rounded border border-violet-200">휴대폰 -{discountBreakdown.mobile.toLocaleString()}</div>}
-                {discountBreakdown.stb > 0 && <div className="text-[10px] text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-100">STB할인 -{discountBreakdown.stb.toLocaleString()}</div>}
-                {discountBreakdown.prepaid > 0 && <div className="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">선납권 -{discountBreakdown.prepaid.toLocaleString()}</div>}
+                {discountBreakdown.bundle > 0 && <div className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded">결합할인 -{discountBreakdown.bundle.toLocaleString()}</div>}
+                {discountBreakdown.mobile > 0 && <div className="text-[10px] text-violet-600 font-bold bg-violet-100 px-2 py-0.5 rounded">휴대폰 -{discountBreakdown.mobile.toLocaleString()}</div>}
+                {discountBreakdown.prepaid > 0 && <div className="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded">선납권 -{discountBreakdown.prepaid.toLocaleString()}</div>}
               </div>
             </div>
 
-            <div className="flex items-center gap-6 md:gap-10 w-full md:w-auto justify-between md:justify-end">
-              {customerQuotedFee > 0 && (
-                <div className="flex flex-col items-end">
-                  <div className="text-[10px] text-fuchsia-500 font-black mb-0.5">선납권 추천액</div>
+            <div className="flex items-center gap-4 md:gap-8 w-full md:w-auto justify-between md:justify-end">
+              <div className="flex items-center gap-6">
+                {customerQuotedFee > 0 && (
+                  <div className="flex flex-col items-end">
+                    <div className="text-[10px] text-fuchsia-500 font-black mb-0.5 uppercase tracking-wider">선납권 추천</div>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-2xl font-black text-fuchsia-600 tracking-tighter">{recommendedPrepaid.toLocaleString()}</span>
+                      <span className="text-sm font-bold text-fuchsia-600">원</span>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="flex flex-col items-end border-l border-slate-100 pl-6">
+                  <div className="text-[10px] text-slate-400 font-black mb-0.5 uppercase tracking-wider">월 예상 납부액</div>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-2xl font-black text-fuchsia-600">{recommendedPrepaid.toLocaleString()}</span>
-                    <span className="text-sm font-bold text-fuchsia-600">원</span>
+                    <span className="text-4xl font-black text-violet-600 tracking-tighter">{totalPrice.toLocaleString()}</span>
+                    <span className="text-xl font-bold text-slate-900">원</span>
                   </div>
                 </div>
-              )}
-              <div className="flex flex-col items-end border-l border-slate-100 pl-6 md:pl-10">
-                <div className="text-[10px] text-slate-400 font-black mb-0.5 uppercase tracking-wider">월 예상 납부액</div>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-black text-violet-600 tracking-tighter">{totalPrice.toLocaleString()}</span>
-                  <span className="text-xl font-bold text-slate-900">원</span>
-                </div>
               </div>
+
+              <button 
+                onClick={() => setIsShareModalOpen(true)}
+                className="bg-violet-600 hover:bg-violet-700 text-white w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center shadow-lg active:scale-95 transition-all flex-shrink-0"
+                title="상담 내역 복사"
+              >
+                <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/>
+                </svg>
+              </button>
             </div>
           </div>
         </div>
       </div>
+
+      {/* 복사 미리보기 모달 */}
+      {isShareModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsShareModalOpen(false)}></div>
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm relative overflow-hidden animate-slide-up">
+            <div className="bg-violet-600 p-6 flex flex-col items-center">
+              <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mb-3">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+              </div>
+              <h3 className="text-white font-black text-xl">상담 내역 확인</h3>
+              <p className="text-violet-100 text-xs font-bold mt-1">설계 내용을 복사하여 전송하세요.</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 max-h-64 overflow-y-auto">
+                <pre className="text-xs text-slate-600 font-medium whitespace-pre-wrap leading-relaxed">{shareSummaryText}</pre>
+              </div>
+              <button onClick={handleCopyText} className="w-full bg-violet-600 hover:bg-violet-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-violet-100 transition-all active:scale-95 flex items-center justify-center gap-2">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
+                텍스트 복사하기
+              </button>
+              <button onClick={() => setIsShareModalOpen(false)} className="w-full py-3 text-slate-400 text-xs font-bold hover:text-slate-600 transition-colors">닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
