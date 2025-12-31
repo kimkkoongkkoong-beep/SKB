@@ -1,4 +1,3 @@
-
 import { InternetPlan, TVPlan, STBOption, MobileBundle, PlanOption } from './types';
 
 export const INTERNET_PLANS: InternetPlan[] = [
@@ -48,7 +47,7 @@ export const TV_PLANS: TVPlan[] = [
     id: 'tv_lite',
     name: 'B tv 이코노미',
     channels: 184,
-    price: 14300,
+    price: 9900,
     description: '필수 채널 중심의 실속형 요금제'
   },
   {
