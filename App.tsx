@@ -12,11 +12,11 @@ import { SelectionState } from './types';
 // B tv pop (CATV) 전용 요금제 데이터
 const CATV_TV_PLANS = [
   { id: 'pop_100', name: 'B tv pop 100', price: 7700, channels: 100, description: '가성비 중심의 실속 케이블 방송' },
-  { id: 'pop_180', name: 'B tv pop 180', price: 9900, channels: 180, description: '다양한 채널을 즐기는 합리적 선택' },
-  { id: 'pop_230', name: 'B tv pop 230', price: 12100, channels: 230, description: '전 채널을 시청하는 프리미엄 케이블' },
+  { id: 'pop_180', name: 'B tv pop 180', price: 7700, channels: 180, description: '다양한 채널을 즐기는 합리적 선택' },
+  { id: 'pop_230', name: 'B tv pop 230', price: 9900, channels: 230, description: '전 채널을 시청하는 프리미엄 케이블' },
 ];
 
-// CATV 전용 셋톱박스 데이터
+// CATV 전용 셋톱박스 데이터 (기본 임대료)
 const CATV_STB_OPTIONS = [
   { id: 'stb_smart3_pop', name: 'Smart 3_POP', price: 2200, description: 'pop 전용 스마트 셋톱박스' },
   { id: 'stb_ai2_pop', name: 'AI2_POP', price: 4400, description: '누구(NUGU) 탑재 pop 전용 AI 셋톱박스' },
@@ -31,11 +31,11 @@ const B_TV_2_PRICES: Record<string, number> = {
   'tv_none': 0
 };
 
-// B tv 2 전용 요금제 맵 (CATV/pop용)
+// B tv 2 전용 요금제 맵 (CATV/pop용) - 요청에 따른 가격 수정
 const B_TV_2_POP_PRICES: Record<string, number> = {
   'pop_100': 3850,
-  'pop_180': 4950,
-  'pop_230': 6050,
+  'pop_180': 5500,
+  'pop_230': 6600,
   'tv_none': 0
 };
 
@@ -134,7 +134,7 @@ const App: React.FC = () => {
     }
   }, [tvType]);
 
-  const { totalPrice, discountBreakdown, isTvSelected, isTv2Selected, currentAddOns } = useMemo(() => {
+  const { totalPrice, discountBreakdown, isTvSelected, isTv2Selected, currentAddOns, effectiveStbPrice } = useMemo(() => {
     let base = 0;
     const internet = INTERNET_PLANS.find(p => p.id === selections.internetId);
     
@@ -162,15 +162,30 @@ const App: React.FC = () => {
     
     base += internetPrice;
 
+    // STB 임대료 계산 (AI2_POP 및 Smart 3_POP 가변 로직)
+    let currentEffectiveStbPrice = stb ? stb.price : 0;
+    if (tvType === 'CATV') {
+      if (selections.stbId === 'stb_ai2_pop') {
+        if (selections.tvId === 'pop_230') currentEffectiveStbPrice = 0;
+        else if (selections.tvId === 'pop_180') currentEffectiveStbPrice = 1100;
+        else if (selections.tvId === 'pop_100') currentEffectiveStbPrice = 2200;
+      } else if (selections.stbId === 'stb_smart3_pop') {
+        if (selections.tvId === 'pop_230') currentEffectiveStbPrice = 2200;
+        else if (selections.tvId === 'pop_180') currentEffectiveStbPrice = 3300;
+        else if (selections.tvId === 'pop_100') currentEffectiveStbPrice = 3300;
+      }
+    }
+
     if (hasTv) {
       base += tv!.price;
-      if (stb) base += stb.price;
+      base += currentEffectiveStbPrice;
     }
 
     if (hasTv2 && selections.tv2Id) {
       const tv2Price = currentBtv2Prices[selections.tv2Id] || 0;
       base += tv2Price;
-      base += tvType === 'IPTV' ? 2200 : 1100; 
+      // CATV2(pop 2nd) 임대료는 모든 요금제 2200원 고정 적용 (IPTV Smart 3 2nd와 동일하게 2200원 설정)
+      base += 2200; 
     }
 
     const isWingsSelected = selections.addOnIds.includes('addon_wings');
@@ -196,6 +211,7 @@ const App: React.FC = () => {
       family: familyDiscount
     };
 
+    // IPTV 전용 STB 프로모션 할인
     if (tvType === 'IPTV' && hasTv && stb) {
       if (stb.id === 'stb_ai2') {
         if (tv!.id === 'tv_all' || tv!.id === 'tv_all_plus') {
@@ -222,7 +238,8 @@ const App: React.FC = () => {
     }
 
     if (selections.mobileLineCount > 0 && !selections.isFamilyPlan) {
-      if (hasTv || hasTv2) {
+      // CATV(pop)은 휴대폰 결합 시 TV 할인(1,100원)이 적용되지 않음
+      if ((hasTv || hasTv2) && tvType !== 'CATV') {
         breakdown.mobile += MOBILE_COMBINATION_DISCOUNTS.TV;
       }
       if (internet) {
@@ -238,7 +255,8 @@ const App: React.FC = () => {
       discountBreakdown: breakdown,
       isTvSelected: hasTv,
       isTv2Selected: hasTv2,
-      currentAddOns: selections.addOnIds.map(id => INTERNET_ADD_ONS.find(a => a.id === id)?.name).filter(Boolean)
+      currentAddOns: selections.addOnIds.map(id => INTERNET_ADD_ONS.find(a => a.id === id)?.name).filter(Boolean),
+      effectiveStbPrice: currentEffectiveStbPrice
     };
   }, [selections, tvType]);
 
@@ -504,16 +522,32 @@ const App: React.FC = () => {
             <section className="animate-slide-up">
               <SectionHeader title={`메인 TV ${tvType} 셋톱박스`} step="2-1" />
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                {(tvType === 'IPTV' ? STB_OPTIONS : CATV_STB_OPTIONS).map((stb) => (
-                  <PlanCard 
-                    key={stb.id}
-                    selected={selections.stbId === stb.id}
-                    onClick={() => setSelections(prev => ({ ...prev, stbId: stb.id }))}
-                    title={stb.name}
-                    price={stb.price}
-                    description={stb.description}
-                  />
-                ))}
+                {(tvType === 'IPTV' ? STB_OPTIONS : CATV_STB_OPTIONS).map((stb) => {
+                  // 실시간으로 변동되는 STB 임대료 계산 (UI 표시용)
+                  let displayPrice = stb.price;
+                  if (tvType === 'CATV') {
+                    if (stb.id === 'stb_ai2_pop') {
+                      if (selections.tvId === 'pop_230') displayPrice = 0;
+                      else if (selections.tvId === 'pop_180') displayPrice = 1100;
+                      else if (selections.tvId === 'pop_100') displayPrice = 2200;
+                    } else if (stb.id === 'stb_smart3_pop') {
+                      if (selections.tvId === 'pop_230') displayPrice = 2200;
+                      else if (selections.tvId === 'pop_180') displayPrice = 3300;
+                      else if (selections.tvId === 'pop_100') displayPrice = 3300;
+                    }
+                  }
+
+                  return (
+                    <PlanCard 
+                      key={stb.id}
+                      selected={selections.stbId === stb.id}
+                      onClick={() => setSelections(prev => ({ ...prev, stbId: stb.id }))}
+                      title={stb.name}
+                      price={displayPrice}
+                      description={stb.description}
+                    />
+                  );
+                })}
               </div>
             </section>
           )}
