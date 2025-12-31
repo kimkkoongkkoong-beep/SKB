@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   INTERNET_PLANS, 
@@ -31,7 +30,7 @@ const B_TV_2_PRICES: Record<string, number> = {
   'tv_none': 0
 };
 
-// B tv 2 전용 요금제 맵 (CATV/pop용) - 요청에 따른 가격 수정
+// B tv 2 전용 요금제 맵 (CATV/pop용)
 const B_TV_2_POP_PRICES: Record<string, number> = {
   'pop_100': 3850,
   'pop_180': 5500,
@@ -99,6 +98,10 @@ const PlanCard: React.FC<{
 );
 
 const App: React.FC = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [password, setPassword] = useState<string>('');
+  const [loginError, setLoginError] = useState<string>('');
+
   const [tvType, setTvType] = useState<'IPTV' | 'CATV'>('IPTV');
   const [selections, setSelections] = useState<SelectionState>({
     internetId: 'int_500m', 
@@ -114,6 +117,17 @@ const App: React.FC = () => {
   });
 
   const [customerQuotedFee, setCustomerQuotedFee] = useState<number>(0);
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password === '0405') {
+      setIsAuthenticated(true);
+      setLoginError('');
+    } else {
+      setLoginError('비밀번호가 올바르지 않습니다.');
+      setPassword('');
+    }
+  };
 
   // TV 타입 변경 시 요금제 및 셋톱박스 초기화
   useEffect(() => {
@@ -134,7 +148,7 @@ const App: React.FC = () => {
     }
   }, [tvType]);
 
-  const { totalPrice, discountBreakdown, isTvSelected, isTv2Selected, currentAddOns, effectiveStbPrice } = useMemo(() => {
+  const { totalPrice, discountBreakdown, isTvSelected, isTv2Selected, currentAddOns } = useMemo(() => {
     let base = 0;
     const internet = INTERNET_PLANS.find(p => p.id === selections.internetId);
     
@@ -184,7 +198,6 @@ const App: React.FC = () => {
     if (hasTv2 && selections.tv2Id) {
       const tv2Price = currentBtv2Prices[selections.tv2Id] || 0;
       base += tv2Price;
-      // CATV2(pop 2nd) 임대료는 모든 요금제 2200원 고정 적용 (IPTV Smart 3 2nd와 동일하게 2200원 설정)
       base += 2200; 
     }
 
@@ -238,7 +251,6 @@ const App: React.FC = () => {
     }
 
     if (selections.mobileLineCount > 0 && !selections.isFamilyPlan) {
-      // CATV(pop)은 휴대폰 결합 시 TV 할인(1,100원)이 적용되지 않음
       if ((hasTv || hasTv2) && tvType !== 'CATV') {
         breakdown.mobile += MOBILE_COMBINATION_DISCOUNTS.TV;
       }
@@ -255,8 +267,7 @@ const App: React.FC = () => {
       discountBreakdown: breakdown,
       isTvSelected: hasTv,
       isTv2Selected: hasTv2,
-      currentAddOns: selections.addOnIds.map(id => INTERNET_ADD_ONS.find(a => a.id === id)?.name).filter(Boolean),
-      effectiveStbPrice: currentEffectiveStbPrice
+      currentAddOns: selections.addOnIds.map(id => INTERNET_ADD_ONS.find(a => a.id === id)?.name).filter(Boolean)
     };
   }, [selections, tvType]);
 
@@ -330,6 +341,54 @@ const App: React.FC = () => {
   const prepaidAmounts = Array.from({ length: 8 }, (_, i) => (i + 1) * 1100);
   const showWingsDiscountInfo = selections.addOnIds.includes('addon_wings') && selections.addOnIds.includes('addon_relief');
 
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full animate-slide-up">
+          <div className="bg-white rounded-[2rem] shadow-2xl overflow-hidden border border-slate-100">
+            <div className="bg-violet-600 p-10 flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mb-6 shadow-lg">
+                <span className="text-violet-600 font-black text-2xl">SK</span>
+              </div>
+              <h1 className="text-white text-2xl font-black tracking-tight">SKB 업셀 계산기</h1>
+              <p className="text-violet-100 mt-2 text-sm font-medium">지정된 사용자만 사용 가능합니다.</p>
+            </div>
+            
+            <form onSubmit={handleLogin} className="p-8 space-y-6">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">비밀번호 입력</label>
+                <input
+                  autoFocus
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Password"
+                  className={`w-full bg-slate-50 border-2 rounded-2xl px-5 py-4 font-bold text-slate-800 transition-all outline-none text-center tracking-[0.5em] focus:bg-white ${
+                    loginError ? 'border-red-200 focus:border-red-500 bg-red-50' : 'border-slate-100 focus:border-violet-500'
+                  }`}
+                />
+                {loginError && (
+                  <p className="text-red-500 text-xs font-bold text-center mt-2 animate-bounce">{loginError}</p>
+                )}
+              </div>
+              
+              <button
+                type="submit"
+                className="w-full bg-violet-600 hover:bg-violet-700 text-white font-black py-4 px-6 rounded-2xl shadow-lg shadow-violet-200 transition-all active:scale-95 text-lg"
+              >
+                접속하기
+              </button>
+            </form>
+            
+            <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-center">
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Authorized Personnel Only</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen pb-48 bg-slate-50">
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
@@ -343,13 +402,17 @@ const App: React.FC = () => {
               <span className="ml-2 text-xs md:text-sm font-medium text-violet-500">(지정 사용자 전용)</span>
             </h1>
           </div>
-          <div className="text-xs text-slate-400 font-medium">3년 약정 기준</div>
+          <button 
+            onClick={() => setIsAuthenticated(false)}
+            className="text-[10px] font-bold text-slate-400 hover:text-red-500 transition-colors uppercase tracking-widest"
+          >
+            Logout
+          </button>
         </div>
       </header>
 
       <main className="max-w-5xl mx-auto px-4 pt-8">
         <div className="space-y-12">
-          
           <section className="bg-gradient-to-br from-violet-50 to-white p-6 rounded-3xl border border-violet-100 shadow-sm">
             <SectionHeader title="업셀링 빠른선택" step="0" badge="Recommended">
               <div className="flex flex-col sm:flex-row items-center gap-4 bg-white/80 backdrop-blur-sm px-4 py-2 rounded-xl border border-violet-200 shadow-sm w-full md:w-auto">
@@ -523,7 +586,6 @@ const App: React.FC = () => {
               <SectionHeader title={`메인 TV ${tvType} 셋톱박스`} step="2-1" />
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 {(tvType === 'IPTV' ? STB_OPTIONS : CATV_STB_OPTIONS).map((stb) => {
-                  // 실시간으로 변동되는 STB 임대료 계산 (UI 표시용)
                   let displayPrice = stb.price;
                   if (tvType === 'CATV') {
                     if (stb.id === 'stb_ai2_pop') {
@@ -656,7 +718,6 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {/* Sticky Summary Bar (Purple Theme) */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-[0_-12px_40px_rgba(0,0,0,0.08)] z-50 backdrop-blur-md bg-white/95">
         <div className="max-w-5xl mx-auto px-4 py-4 md:py-6">
           <div className="flex flex-col md:flex-row items-end md:items-center justify-between gap-4">
