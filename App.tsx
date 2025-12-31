@@ -260,6 +260,10 @@ TV 2: ${tv2 ? `${tv2.name} (Smart 3)` : '없음'}
     setIsShareModalOpen(false);
   };
 
+  const isBothAddOnsSelected = useMemo(() => {
+    return selections.addOnIds.includes('addon_wings') && selections.addOnIds.includes('addon_relief');
+  }, [selections.addOnIds]);
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
@@ -336,6 +340,28 @@ TV 2: ${tv2 ? `${tv2.name} (Smart 3)` : '없음'}
                 </label>
               </div>
             </SectionHeader>
+            
+            {selections.isFamilyPlan && (
+              <div className="mb-6 animate-slide-up bg-violet-50 border border-violet-200 rounded-3xl p-6 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 bg-violet-600 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h4 className="text-violet-900 font-bold text-sm mb-2">패밀리 요금제 가입 안내 (공식 기준)</h4>
+                    <ul className="text-violet-700 text-xs space-y-1.5 font-medium list-disc list-inside">
+                      <li>타지역에 SK브로드밴드 인터넷을 사용 중인 가족(본인/배우자/직계존비속)이 있는 경우 가입 가능합니다.</li>
+                      <li>가입 시 가족관계를 증명할 수 있는 서류(가족관계증명서 등) 제출이 필수입니다.</li>
+                      <li>휴대폰 결합 할인과 중복 적용이 불가능합니다.</li>
+                      <li>기존 고객이 패밀리로 변경 시 혜택이 상이할 수 있으니 센터 확인이 필요합니다.</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {INTERNET_PLANS.map((plan) => (
                 <PlanCard key={plan.id} selected={selections.internetId === plan.id} onClick={() => setSelections(prev => ({ ...prev, internetId: plan.id }))} title={`${plan.name} (${plan.speed})`} price={plan.price} description={plan.description}/>
@@ -346,9 +372,25 @@ TV 2: ${tv2 ? `${tv2.name} (Smart 3)` : '없음'}
           {/* 부가서비스 */}
           <section>
             <SectionHeader title="인터넷 부가서비스" step="1-1" />
+            
+            {isBothAddOnsSelected && (
+              <div className="mb-6 animate-slide-up bg-violet-50 border border-violet-200 rounded-2xl p-4 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="w-5 h-5 bg-violet-600 rounded-full flex items-center justify-center flex-shrink-0">
+                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <p className="text-violet-800 text-xs font-bold">
+                    윙즈와 안심서비스를 동시 선택 시, 윙즈 요금이 <span className="text-violet-600 underline decoration-2 underline-offset-2">1,100원</span>으로 자동 할인 적용됩니다.
+                  </p>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {INTERNET_ADD_ONS.map((addon) => (
-                <PlanCard key={addon.id} selected={selections.addOnIds.includes(addon.id)} onClick={() => toggleAddOn(addon.id)} title={addon.name} price={addon.price} description={addon.description}/>
+                <PlanCard key={addon.id} selected={selections.addOnIds.includes(addon.id)} onClick={() => toggleAddOn(addon.id)} title={addon.name} price={addon.id === 'addon_wings' && isBothAddOnsSelected ? 1100 : addon.price} description={addon.description}/>
               ))}
             </div>
           </section>
@@ -421,7 +463,7 @@ TV 2: ${tv2 ? `${tv2.name} (Smart 3)` : '없음'}
                 <span className="bg-violet-600 text-white px-2 py-0.5 rounded font-black text-[10px] uppercase">{tvType}</span>
               </div>
               <div className="flex flex-wrap gap-2 mt-1">
-                {discountBreakdown.bundle > 0 && <div className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded">결합할인 -{discountBreakdown.bundle.toLocaleString()}</div>}
+                {discountBreakdown.bundle > 0 && <div className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded">요즘우리집결합 -{discountBreakdown.bundle.toLocaleString()}</div>}
                 {discountBreakdown.mobile > 0 && <div className="text-[10px] text-violet-600 font-bold bg-violet-100 px-2 py-0.5 rounded">휴대폰 -{discountBreakdown.mobile.toLocaleString()}</div>}
                 {discountBreakdown.prepaid > 0 && <div className="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded">선납권 -{discountBreakdown.prepaid.toLocaleString()}</div>}
               </div>
