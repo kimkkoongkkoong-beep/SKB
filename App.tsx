@@ -1,5 +1,20 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
+// Firebase SDK 임포트 (esm.sh 사용)
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { 
+  getFirestore, 
+  collection, 
+  onSnapshot, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  doc, 
+  query, 
+  orderBy,
+  getDocs
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
 import { 
   INTERNET_PLANS, 
   INTERNET_ADD_ONS,
@@ -9,8 +24,25 @@ import {
 } from './constants';
 import { SelectionState } from './types';
 
+// ==========================================================
+// Firebase 설정 (입력해주신 설정 적용됨)
+// ==========================================================
+const firebaseConfig = {
+  apiKey: "AIzaSyAKi2cV9hG2TBhRbsO9gx4xQ0DxxUnF_8o",
+  authDomain: "skbb-4ec15.firebaseapp.com",
+  projectId: "skbb-4ec15",
+  storageBucket: "skbb-4ec15.firebasestorage.app",
+  messagingSenderId: "902628972456",
+  appId: "1:902628972456:web:8466535c4554feabaf6f9d"
+};
+
+// Firebase 초기화 검증
+const isConfigValid = firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY";
+const app = isConfigValid ? initializeApp(firebaseConfig) : null;
+const db = app ? getFirestore(app) : null;
+
 interface Promotion {
-  id: number;
+  id: string;
   title: string;
   startDate: string;
   endDate: string;
@@ -20,12 +52,11 @@ interface Promotion {
   type: string;
   benefits: string[];
   terms: string[];
+  createdAt?: any;
 }
 
-// 초기 프로모션 데이터
-const INITIAL_PROMOTIONS: Promotion[] = [
+const INITIAL_PROMOTIONS = [
   {
-    id: 1,
     title: "봄 맞이 인터넷+TV 결합 사은품 증정 프로모션",
     startDate: "2024-03-01",
     endDate: "2025-04-30",
@@ -33,19 +64,10 @@ const INITIAL_PROMOTIONS: Promotion[] = [
     longDescription: "따뜻한 봄을 맞아 SK브로드밴드에서 준비한 특별한 선물! 인터넷과 B tv를 동시에 신규 가입하시는 모든 고객님께 역대급 사은품 혜택을 드립니다.",
     badge: "HOT",
     type: "사은품",
-    benefits: [
-      "신세계/신한/롯데 백화점 상품권 최대 45만원권 증정",
-      "또는 삼성/LG 최신 가전 (건조기, 공기청정기 등) 지원",
-      "인터넷 500M 이상 가입 시 추가 할인 혜택"
-    ],
-    terms: [
-      "3년 약정 가입 고객에 한함",
-      "가입 후 1년 이내 해지 시 사은품 반환금이 발생할 수 있음",
-      "타 프로모션과 중복 적용이 제한될 수 있음"
-    ]
+    benefits: ["신세계/신한/롯데 백화점 상품권 최대 45만원권 증정", "또는 삼성/LG 최신 가전 (건조기, 공기청정기 등) 지원", "인터넷 500M 이상 가입 시 추가 할인 혜택"],
+    terms: ["3년 약정 가입 고객에 한함", "가입 후 1년 이내 해지 시 사은품 반환금이 발생할 수 있음", "타 프로모션과 중복 적용이 제한될 수 있음"]
   },
   {
-    id: 2,
     title: "B tv All+ 업그레이드 요금 할인",
     startDate: "2024-02-15",
     endDate: "2025-05-31",
@@ -53,16 +75,8 @@ const INITIAL_PROMOTIONS: Promotion[] = [
     longDescription: "콘텐츠의 끝판왕 All+ 요금제를 더 가볍게 즐기세요. 258개 전 채널 시청은 물론, 인기 VOD까지 무제한으로 감상할 수 있는 기회입니다.",
     badge: "EVENT",
     type: "요금할인",
-    benefits: [
-      "B tv All+ 요금제 월 5,500원 즉시 할인",
-      "매월 최신 영화 유료 VOD 1편 무료 쿠폰 증정",
-      "AI 셋톱박스 임대료 추가 할인 적용"
-    ],
-    terms: [
-      "B tv All+ 신규 가입 또는 업그레이드 고객 대상",
-      "중도 요금제 하향 시 할인 혜택이 중단됨",
-      "결합 할인과 별도로 추가 중복 적용 가능"
-    ]
+    benefits: ["B tv All+ 요금제 월 5,500원 즉시 할인", "매월 최신 영화 유료 VOD 1편 무료 쿠폰 증정", "AI 셋톱박스 임대료 추가 할인 적용"],
+    terms: ["B tv All+ 신규 가입 또는 업그레이드 고객 대상", "중도 요금제 하향 시 할인 혜택이 중단됨", "결합 할인과 별도로 추가 중복 적용 가능"]
   }
 ];
 
@@ -158,16 +172,14 @@ const App: React.FC = () => {
   const [loginError, setLoginError] = useState<string>('');
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
   const [currentView, setCurrentView] = useState<'calculator' | 'promotions'>('calculator');
-  const [selectedPromoId, setSelectedPromoId] = useState<number | null>(null);
+  const [selectedPromoId, setSelectedPromoId] = useState<string | null>(null);
   const [promoSearchQuery, setPromoSearchQuery] = useState('');
+  
+  // 클라우드 동기화 상태 관리
+  const [firebaseStatus, setFirebaseStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
+  const [firebaseErrorMessage, setFirebaseErrorMessage] = useState<string>('');
 
-  // 프로모션 데이터 상태 관리 (로컬 스토리지 연동)
-  const [promotions, setPromotions] = useState<Promotion[]>(() => {
-    const saved = localStorage.getItem('skb_promotions');
-    return saved ? JSON.parse(saved) : INITIAL_PROMOTIONS;
-  });
-
-  // 프로모션 편집 모드 상태
+  const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [isPromoFormOpen, setIsPromoFormOpen] = useState(false);
   const [editingPromo, setEditingPromo] = useState<Promotion | null>(null);
 
@@ -187,9 +199,40 @@ const App: React.FC = () => {
 
   const [customerQuotedFee, setCustomerQuotedFee] = useState<number>(0);
 
+  // Firestore 실시간 동기화
   useEffect(() => {
-    localStorage.setItem('skb_promotions', JSON.stringify(promotions));
-  }, [promotions]);
+    if (!db) {
+      setFirebaseStatus('error');
+      setFirebaseErrorMessage('Firebase Config가 설정되지 않았습니다.');
+      return;
+    }
+
+    setFirebaseStatus('connecting');
+    const promosRef = collection(db, "promotions");
+    const q = query(promosRef, orderBy("createdAt", "desc"));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setFirebaseStatus('connected');
+      if (snapshot.empty) {
+        // 데이터가 없는 경우 초기화 (최초 1회만 실행됨)
+        INITIAL_PROMOTIONS.forEach(async (item) => {
+          await addDoc(promosRef, { ...item, createdAt: new Date() });
+        });
+      } else {
+        const promoData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Promotion[];
+        setPromotions(promoData);
+      }
+    }, (error) => {
+      console.error("Firestore Sync Error:", error);
+      setFirebaseStatus('error');
+      setFirebaseErrorMessage(error.message);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -349,21 +392,28 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
     return promotions.find(p => p.id === selectedPromoId);
   }, [selectedPromoId, promotions]);
 
-  const handleDeletePromo = (id: number) => {
-    if (window.confirm('이 프로모션을 삭제하시겠습니까?')) {
-      setPromotions(prev => prev.filter(p => p.id !== id));
-      if (selectedPromoId === id) setSelectedPromoId(null);
+  const handleDeletePromo = async (id: string) => {
+    if (window.confirm('이 프로모션을 클라우드에서 완전히 삭제하시겠습니까?')) {
+      try {
+        if (db) {
+          await deleteDoc(doc(db, "promotions", id));
+          if (selectedPromoId === id) setSelectedPromoId(null);
+        }
+      } catch (e) {
+        alert("삭제 중 오류가 발생했습니다.");
+      }
     }
   };
 
-  const handleSavePromo = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSavePromo = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!db) return;
+
     const formData = new FormData(e.currentTarget);
     const benefitsStr = formData.get('benefits') as string;
     const termsStr = formData.get('terms') as string;
 
-    const newPromo: Promotion = {
-      id: editingPromo ? editingPromo.id : Date.now(),
+    const promoData = {
       title: formData.get('title') as string,
       startDate: formData.get('startDate') as string,
       endDate: formData.get('endDate') as string,
@@ -373,16 +423,20 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
       longDescription: formData.get('longDescription') as string,
       benefits: benefitsStr.split('\n').filter(s => s.trim() !== ''),
       terms: termsStr.split('\n').filter(s => s.trim() !== ''),
+      createdAt: editingPromo ? editingPromo.createdAt : new Date()
     };
 
-    if (editingPromo) {
-      setPromotions(prev => prev.map(p => p.id === editingPromo.id ? newPromo : p));
-    } else {
-      setPromotions(prev => [newPromo, ...prev]);
+    try {
+      if (editingPromo) {
+        await updateDoc(doc(db, "promotions", editingPromo.id), promoData);
+      } else {
+        await addDoc(collection(db, "promotions"), promoData);
+      }
+      setIsPromoFormOpen(false);
+      setEditingPromo(null);
+    } catch (e) {
+      alert("저장 중 오류가 발생했습니다.");
     }
-
-    setIsPromoFormOpen(false);
-    setEditingPromo(null);
   };
 
   if (!isAuthenticated) {
@@ -436,16 +490,36 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
               </button>
             </nav>
           </div>
-          <button onClick={() => setIsAuthenticated(false)} className="text-[10px] font-bold text-slate-400 hover:text-red-500 transition-colors uppercase tracking-widest">Logout</button>
+          <div className="flex items-center gap-4">
+            {/* 개선된 클라우드 연결 상태 표시기 */}
+            <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter transition-colors border ${
+              firebaseStatus === 'connected' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+              firebaseStatus === 'connecting' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+              'bg-red-50 text-red-600 border-red-100'
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${
+                firebaseStatus === 'connected' ? 'bg-emerald-500' :
+                firebaseStatus === 'connecting' ? 'bg-amber-500 animate-pulse' :
+                'bg-red-500'
+              }`}></span>
+              {firebaseStatus === 'connected' ? 'Cloud Connected' : firebaseStatus === 'connecting' ? 'Connecting...' : 'Connection Error'}
+            </div>
+            <button onClick={() => setIsAuthenticated(false)} className="text-[10px] font-bold text-slate-400 hover:text-red-500 transition-colors uppercase tracking-widest">Logout</button>
+          </div>
         </div>
       </header>
+
+      {/* 에러 발생 시 공지 바 */}
+      {firebaseStatus === 'error' && (
+        <div className="bg-red-600 text-white text-[10px] font-bold py-2 text-center animate-fade-in">
+          Cloud Error: {firebaseErrorMessage} (Firebase 설정을 확인해주세요)
+        </div>
+      )}
 
       <main className="max-w-5xl mx-auto px-4 pt-8">
         {currentView === 'calculator' ? (
           <div className="space-y-12 animate-fade-in">
-            {/* 요금 계산기 컨텐츠는 동일하므로 생략하거나 기존 로직 유지 */}
-            {/* 업셀링 빠른선택 섹션 시작 */}
-            <section className="bg-gradient-to-br from-violet-50 to-white p-6 rounded-3xl border border-violet-100 shadow-sm">
+             <section className="bg-gradient-to-br from-violet-50 to-white p-6 rounded-3xl border border-violet-100 shadow-sm">
               <SectionHeader title="업셀링 빠른선택" step="0" badge="Recommended">
                 <div className="flex flex-col sm:flex-row items-center gap-4 bg-white/80 backdrop-blur-sm px-4 py-2 rounded-xl border border-violet-200 shadow-sm w-full md:w-auto">
                   <div className="flex items-center bg-slate-100 p-1 rounded-lg">
@@ -691,7 +765,12 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
               </div>
             </div>
 
-            {filteredPromotions.length > 0 ? (
+            {firebaseStatus === 'connecting' ? (
+              <div className="flex flex-col items-center justify-center py-32 space-y-4">
+                <div className="w-12 h-12 border-4 border-violet-100 border-t-violet-600 rounded-full animate-spin"></div>
+                <p className="text-slate-400 font-bold animate-pulse">클라우드 데이터 불러오는 중...</p>
+              </div>
+            ) : filteredPromotions.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredPromotions.map((promo) => (
                   <div key={promo.id} className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col hover:shadow-xl hover:border-violet-100 transition-all group relative">
@@ -709,16 +788,6 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
                       </div>
                       <h3 className="text-xl font-bold text-slate-800 mb-4 group-hover:text-violet-600 transition-colors leading-tight">{promo.title}</h3>
                       <p className="text-sm text-slate-500 leading-relaxed mb-6 line-clamp-2">{promo.description}</p>
-                      
-                      <div className="space-y-3 mt-auto">
-                        <div className="flex items-center gap-3 text-xs font-bold text-slate-400 bg-slate-50 p-3 rounded-2xl border border-slate-100">
-                          <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                          <div className="flex flex-col">
-                            <span className="text-[10px] text-slate-300 uppercase tracking-tighter">Event Period</span>
-                            <span className="text-slate-600">{promo.startDate.replace(/-/g, '.')} ~ {promo.endDate.replace(/-/g, '.')}</span>
-                          </div>
-                        </div>
-                      </div>
                     </div>
                     <div className="bg-slate-50 px-8 py-5 border-t border-slate-100 flex items-center justify-between">
                       <button 
@@ -768,7 +837,7 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
                   <input required name="title" defaultValue={editingPromo?.title} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none"/>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">유형 (사은품, 요금할인 등)</label>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">유형</label>
                   <input required name="type" defaultValue={editingPromo?.type} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none"/>
                 </div>
                 <div className="space-y-2">
@@ -779,42 +848,38 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
                   <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">종료일</label>
                   <input required type="date" name="endDate" defaultValue={editingPromo?.endDate} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none"/>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">배지 (HOT, NEW 등 - 선택)</label>
-                  <input name="badge" defaultValue={editingPromo?.badge} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none"/>
-                </div>
               </div>
-
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">배지</label>
+                <input name="badge" defaultValue={editingPromo?.badge} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none"/>
+              </div>
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">요약 설명</label>
                 <input required name="description" defaultValue={editingPromo?.description} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none"/>
               </div>
-
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">상세 소개글</label>
                 <textarea required name="longDescription" defaultValue={editingPromo?.longDescription} rows={3} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none resize-none"/>
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">주요 혜택 (줄바꿈으로 구분)</label>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">주요 혜택 (줄바꿈 구분)</label>
                   <textarea name="benefits" defaultValue={editingPromo?.benefits.join('\n')} rows={4} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none resize-none"/>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">유의사항 (줄바꿈으로 구분)</label>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">유의사항 (줄바꿈 구분)</label>
                   <textarea name="terms" defaultValue={editingPromo?.terms.join('\n')} rows={4} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none resize-none"/>
                 </div>
               </div>
-
               <button type="submit" className="w-full bg-violet-600 hover:bg-violet-700 text-white font-black py-4 rounded-2xl shadow-xl shadow-violet-100 transition-all active:scale-95 text-lg">
-                {editingPromo ? '수정 내용 저장' : '프로모션 등록하기'}
+                저장하기
               </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* 하단 바 (계산기 뷰에서만 노출) */}
+      {/* 하단 바 (계산기 뷰 전용) */}
       {currentView === 'calculator' && (
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-[0_-12px_40px_rgba(0,0,0,0.08)] z-40 backdrop-blur-md bg-white/95">
           <div className="max-w-5xl mx-auto px-4 py-4 md:py-6">
@@ -844,7 +909,6 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
                       </div>
                     </div>
                   )}
-                  
                   <div className="flex flex-col items-end border-l border-slate-100 pl-6">
                     <div className="text-[10px] text-slate-400 font-black mb-0.5 uppercase tracking-wider">월 예상 납부액</div>
                     <div className="flex items-baseline gap-1">
@@ -853,15 +917,11 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
                     </div>
                   </div>
                 </div>
-
                 <button 
                   onClick={() => setIsShareModalOpen(true)}
                   className="bg-violet-600 hover:bg-violet-700 text-white w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center shadow-lg active:scale-95 transition-all flex-shrink-0"
-                  title="상담 내역 복사"
                 >
-                  <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/>
-                  </svg>
+                  <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
                 </button>
               </div>
             </div>
@@ -875,21 +935,14 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsShareModalOpen(false)}></div>
           <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm relative overflow-hidden animate-slide-up">
             <div className="bg-violet-600 p-6 flex flex-col items-center">
-              <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mb-3">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-              </div>
               <h3 className="text-white font-black text-xl">상담 내역 확인</h3>
-              <p className="text-violet-100 text-xs font-bold mt-1">설계 내용을 복사하여 전송하세요.</p>
             </div>
             <div className="p-6 space-y-4">
               <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 max-h-64 overflow-y-auto">
                 <pre className="text-xs text-slate-600 font-medium whitespace-pre-wrap leading-relaxed">{shareSummaryText}</pre>
               </div>
-              <button onClick={handleCopyText} className="w-full bg-violet-600 hover:bg-violet-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-violet-100 transition-all active:scale-95 flex items-center justify-center gap-2">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
-                텍스트 복사하기
-              </button>
-              <button onClick={() => setIsShareModalOpen(false)} className="w-full py-3 text-slate-400 text-xs font-bold hover:text-slate-600 transition-colors">닫기</button>
+              <button onClick={handleCopyText} className="w-full bg-violet-600 hover:bg-violet-700 text-white font-black py-4 rounded-2xl">텍스트 복사하기</button>
+              <button onClick={() => setIsShareModalOpen(false)} className="w-full py-3 text-slate-400 text-xs font-bold">닫기</button>
             </div>
           </div>
         </div>
