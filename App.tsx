@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-// Firebase SDK 임포트 (esm.sh 사용)
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+// Firebase SDK 정식 임포트
+import { initializeApp } from "firebase/app";
 import { 
   getFirestore, 
   collection, 
@@ -12,8 +12,11 @@ import {
   doc, 
   query, 
   orderBy,
-  getDocs
-} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+  QuerySnapshot,
+  DocumentData,
+  FirestoreError,
+  QueryDocumentSnapshot
+} from "firebase/firestore";
 
 import { 
   INTERNET_PLANS, 
@@ -25,7 +28,7 @@ import {
 import { SelectionState } from './types';
 
 // ==========================================================
-// Firebase 설정 (입력해주신 설정 적용됨)
+// Firebase 설정
 // ==========================================================
 const firebaseConfig = {
   apiKey: "AIzaSyAKi2cV9hG2TBhRbsO9gx4xQ0DxxUnF_8o",
@@ -37,7 +40,7 @@ const firebaseConfig = {
 };
 
 // Firebase 초기화 검증
-const isConfigValid = firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY";
+const isConfigValid = !!firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY";
 const app = isConfigValid ? initializeApp(firebaseConfig) : null;
 const db = app ? getFirestore(app) : null;
 
@@ -199,7 +202,7 @@ const App: React.FC = () => {
 
   const [customerQuotedFee, setCustomerQuotedFee] = useState<number>(0);
 
-  // Firestore 실시간 동기화
+  // Firestore 실시간 동기화 (명시적 타입 추가)
   useEffect(() => {
     if (!db) {
       setFirebaseStatus('error');
@@ -211,21 +214,21 @@ const App: React.FC = () => {
     const promosRef = collection(db, "promotions");
     const q = query(promosRef, orderBy("createdAt", "desc"));
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
       setFirebaseStatus('connected');
       if (snapshot.empty) {
-        // 데이터가 없는 경우 초기화 (최초 1회만 실행됨)
+        // 데이터가 없는 경우 초기화
         INITIAL_PROMOTIONS.forEach(async (item) => {
           await addDoc(promosRef, { ...item, createdAt: new Date() });
         });
       } else {
-        const promoData = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
+        const promoData = snapshot.docs.map((docItem: QueryDocumentSnapshot<DocumentData>) => ({
+          id: docItem.id,
+          ...docItem.data()
         })) as Promotion[];
         setPromotions(promoData);
       }
-    }, (error) => {
+    }, (error: FirestoreError) => {
       console.error("Firestore Sync Error:", error);
       setFirebaseStatus('error');
       setFirebaseErrorMessage(error.message);
@@ -491,7 +494,6 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
             </nav>
           </div>
           <div className="flex items-center gap-4">
-            {/* 개선된 클라우드 연결 상태 표시기 */}
             <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter transition-colors border ${
               firebaseStatus === 'connected' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
               firebaseStatus === 'connecting' ? 'bg-amber-50 text-amber-600 border-amber-100' :
@@ -509,7 +511,6 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
         </div>
       </header>
 
-      {/* 에러 발생 시 공지 바 */}
       {firebaseStatus === 'error' && (
         <div className="bg-red-600 text-white text-[10px] font-bold py-2 text-center animate-fade-in">
           Cloud Error: {firebaseErrorMessage} (Firebase 설정을 확인해주세요)
@@ -952,4 +953,3 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
 };
 
 export default App;
-
