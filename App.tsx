@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-// Firebase SDK 정식 임포트
+// Firebase SDK 표준 임포트
 import { initializeApp } from "firebase/app";
 import { 
   getFirestore, 
@@ -12,10 +12,12 @@ import {
   doc, 
   query, 
   orderBy,
+  serverTimestamp,
   QuerySnapshot,
   DocumentData,
   FirestoreError,
-  QueryDocumentSnapshot
+  QueryDocumentSnapshot,
+  CollectionReference
 } from "firebase/firestore";
 
 import { 
@@ -28,7 +30,7 @@ import {
 import { SelectionState } from './types';
 
 // ==========================================================
-// Firebase 설정
+// Firebase 설정 (사용자 제공 설정)
 // ==========================================================
 const firebaseConfig = {
   apiKey: "AIzaSyAKi2cV9hG2TBhRbsO9gx4xQ0DxxUnF_8o",
@@ -39,7 +41,7 @@ const firebaseConfig = {
   appId: "1:902628972456:web:8466535c4554feabaf6f9d"
 };
 
-// Firebase 초기화 검증
+// Firebase 초기화
 const isConfigValid = !!firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY";
 const app = isConfigValid ? initializeApp(firebaseConfig) : null;
 const db = app ? getFirestore(app) : null;
@@ -83,7 +85,6 @@ const INITIAL_PROMOTIONS = [
   }
 ];
 
-// B tv pop (CATV) 전용 요금제 데이터
 const CATV_TV_PLANS = [
   { id: 'pop_100', name: 'B tv pop 100', price: 7700, channels: 100, description: '가성비 중심의 실속 케이블 방송' },
   { id: 'pop_180', name: 'B tv pop 180', price: 7700, channels: 180, description: '다양한 채널을 즐기는 합리적 선택' },
@@ -178,13 +179,13 @@ const App: React.FC = () => {
   const [selectedPromoId, setSelectedPromoId] = useState<string | null>(null);
   const [promoSearchQuery, setPromoSearchQuery] = useState('');
   
-  // 클라우드 동기화 상태 관리
   const [firebaseStatus, setFirebaseStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
   const [firebaseErrorMessage, setFirebaseErrorMessage] = useState<string>('');
 
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [isPromoFormOpen, setIsPromoFormOpen] = useState(false);
   const [editingPromo, setEditingPromo] = useState<Promotion | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [tvType, setTvType] = useState<'IPTV' | 'CATV'>('IPTV');
   const [selections, setSelections] = useState<SelectionState>({
@@ -202,36 +203,45 @@ const App: React.FC = () => {
 
   const [customerQuotedFee, setCustomerQuotedFee] = useState<number>(0);
 
-  // Firestore 실시간 동기화 (명시적 타입 추가)
+  // Firestore 실시간 동기화
   useEffect(() => {
     if (!db) {
       setFirebaseStatus('error');
-      setFirebaseErrorMessage('Firebase Config가 설정되지 않았습니다.');
+      setFirebaseErrorMessage('Firebase Config가 올바르지 않습니다.');
       return;
     }
 
     setFirebaseStatus('connecting');
-    const promosRef = collection(db, "promotions");
+    const promosRef = collection(db, "promotions") as CollectionReference<DocumentData>;
     const q = query(promosRef, orderBy("createdAt", "desc"));
 
     const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
       setFirebaseStatus('connected');
       if (snapshot.empty) {
-        // 데이터가 없는 경우 초기화
+        // 데이터가 아예 없을 때만 초기 데이터 생성
         INITIAL_PROMOTIONS.forEach(async (item) => {
-          await addDoc(promosRef, { ...item, createdAt: new Date() });
+          try {
+            await addDoc(promosRef, { ...item, createdAt: serverTimestamp() });
+          } catch (e) {
+            console.error("Initial Seeding Error:", e);
+          }
         });
       } else {
         const promoData = snapshot.docs.map((docItem: QueryDocumentSnapshot<DocumentData>) => ({
           id: docItem.id,
-          ...docItem.data()
+          ...(docItem.data() as Omit<Promotion, 'id'>)
         })) as Promotion[];
         setPromotions(promoData);
       }
     }, (error: FirestoreError) => {
       console.error("Firestore Sync Error:", error);
       setFirebaseStatus('error');
-      setFirebaseErrorMessage(error.message);
+      // 권한 에러인 경우 더 명확한 가이드 제공
+      if (error.code === 'permission-denied') {
+        setFirebaseErrorMessage('Firebase 보안 규칙 설정이 필요합니다 (권한 거부됨)');
+      } else {
+        setFirebaseErrorMessage(error.message);
+      }
     });
 
     return () => unsubscribe();
@@ -396,11 +406,12 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
   }, [selectedPromoId, promotions]);
 
   const handleDeletePromo = async (id: string) => {
-    if (window.confirm('이 프로모션을 클라우드에서 완전히 삭제하시겠습니까?')) {
+    if (window.confirm('이 프로모션을 클라우드에서 완전히 삭제하시겠습니까? 다른 PC에서도 삭제됩니다.')) {
       try {
         if (db) {
           await deleteDoc(doc(db, "promotions", id));
           if (selectedPromoId === id) setSelectedPromoId(null);
+          alert("삭제가 완료되었습니다.");
         }
       } catch (e) {
         alert("삭제 중 오류가 발생했습니다.");
@@ -410,8 +421,9 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
 
   const handleSavePromo = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!db) return;
+    if (!db || isSaving) return;
 
+    setIsSaving(true);
     const formData = new FormData(e.currentTarget);
     const benefitsStr = formData.get('benefits') as string;
     const termsStr = formData.get('terms') as string;
@@ -426,7 +438,7 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
       longDescription: formData.get('longDescription') as string,
       benefits: benefitsStr.split('\n').filter(s => s.trim() !== ''),
       terms: termsStr.split('\n').filter(s => s.trim() !== ''),
-      createdAt: editingPromo ? editingPromo.createdAt : new Date()
+      createdAt: editingPromo ? editingPromo.createdAt : serverTimestamp()
     };
 
     try {
@@ -437,8 +449,16 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
       }
       setIsPromoFormOpen(false);
       setEditingPromo(null);
-    } catch (e) {
-      alert("저장 중 오류가 발생했습니다.");
+      alert("클라우드 서버에 저장이 완료되었습니다! 이제 다른 PC에서도 확인 가능합니다.");
+    } catch (e: any) {
+      console.error("Save Error:", e);
+      if (e.code === 'permission-denied') {
+        alert("Firebase 보안 규칙에 의해 쓰기 작업이 거부되었습니다. Firebase Console에서 규칙을 확인해주세요.");
+      } else {
+        alert("저장 중 오류가 발생했습니다: " + e.message);
+      }
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -512,8 +532,8 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
       </header>
 
       {firebaseStatus === 'error' && (
-        <div className="bg-red-600 text-white text-[10px] font-bold py-2 text-center animate-fade-in">
-          Cloud Error: {firebaseErrorMessage} (Firebase 설정을 확인해주세요)
+        <div className="bg-red-600 text-white text-[10px] font-bold py-2 text-center animate-fade-in px-4">
+          Cloud Error: {firebaseErrorMessage} (Firebase 콘솔의 보안 규칙 설정 확인 필요)
         </div>
       )}
 
@@ -645,7 +665,6 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
               </button>
               <h2 className="text-2xl font-black text-slate-800 tracking-tight">상세 정보</h2>
             </div>
-
             <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden relative">
               <div className="absolute top-6 right-6 flex gap-2 z-10">
                 <button onClick={() => { setEditingPromo(selectedPromotion); setIsPromoFormOpen(true); }} className="bg-white/20 hover:bg-white/40 backdrop-blur-md text-white p-3 rounded-2xl border border-white/30 transition-all">
@@ -655,7 +674,6 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                 </button>
               </div>
-
               <div className="bg-gradient-to-br from-violet-600 to-indigo-700 p-10 md:p-16 text-white relative">
                 <div className="max-w-2xl">
                   <div className="inline-block bg-white/20 backdrop-blur-md px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest border border-white/30 mb-6">
@@ -667,67 +685,16 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                       {selectedPromotion.startDate.replace(/-/g, '.')} ~ {selectedPromotion.endDate.replace(/-/g, '.')}
                     </div>
-                    {selectedPromotion.badge && (
-                      <div className="bg-amber-400 text-amber-900 px-3 py-1.5 rounded-xl text-xs font-black border border-amber-300">
-                        {selectedPromotion.badge}
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
-
               <div className="p-10 md:p-16 space-y-12">
                 <section>
-                  <h4 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-3">
-                    <span className="w-2 h-6 bg-violet-600 rounded-full"></span>
-                    프로모션 소개
-                  </h4>
-                  <p className="text-slate-600 leading-relaxed font-medium text-lg">
-                    {selectedPromotion.longDescription}
-                  </p>
+                  <h4 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-3"><span className="w-2 h-6 bg-violet-600 rounded-full"></span>프로모션 소개</h4>
+                  <p className="text-slate-600 leading-relaxed font-medium text-lg">{selectedPromotion.longDescription}</p>
                 </section>
-
-                <section>
-                  <h4 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-3">
-                    <span className="w-2 h-6 bg-violet-600 rounded-full"></span>
-                    주요 혜택 안내
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {selectedPromotion.benefits.map((benefit, idx) => (
-                      <div key={idx} className="bg-slate-50 border border-slate-100 p-6 rounded-3xl flex items-start gap-4">
-                        <div className="w-8 h-8 rounded-2xl bg-violet-100 flex items-center justify-center text-violet-600 flex-shrink-0">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"/></svg>
-                        </div>
-                        <span className="text-slate-700 font-bold leading-snug">{benefit}</span>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-
-                {selectedPromotion.terms.length > 0 && (
-                  <section className="bg-red-50/50 border border-red-100 rounded-[2rem] p-8 md:p-12">
-                    <h4 className="text-lg font-black text-red-600 mb-6 flex items-center gap-3">
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                      가입 전 유의사항
-                    </h4>
-                    <ul className="space-y-4">
-                      {selectedPromotion.terms.map((term, idx) => (
-                        <li key={idx} className="flex items-start gap-3 text-red-700/80 text-sm font-bold leading-relaxed">
-                          <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0"></span>
-                          {term}
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                )}
-
                 <div className="pt-8 border-t border-slate-100 flex justify-center">
-                  <button 
-                    onClick={() => setSelectedPromoId(null)}
-                    className="bg-slate-900 hover:bg-black text-white px-12 py-4 rounded-2xl font-black text-lg shadow-xl shadow-slate-200 transition-all active:scale-95"
-                  >
-                    목록으로 돌아가기
-                  </button>
+                  <button onClick={() => setSelectedPromoId(null)} className="bg-slate-900 hover:bg-black text-white px-12 py-4 rounded-2xl font-black text-lg">목록으로 돌아가기</button>
                 </div>
               </div>
             </div>
@@ -740,32 +707,19 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
                 <h2 className="text-3xl font-black text-slate-800 tracking-tight">프로모션 게시판</h2>
                 <p className="text-slate-500 mt-2 font-medium">현재 진행 중인 SK브로드밴드 주요 프로모션 정보를 확인하세요.</p>
               </div>
-              
               <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto">
-                <button 
-                  onClick={() => { setEditingPromo(null); setIsPromoFormOpen(true); }}
-                  className="bg-violet-600 hover:bg-violet-700 text-white px-6 py-3.5 rounded-2xl font-black text-sm transition-all shadow-lg shadow-violet-100 flex items-center gap-2 whitespace-nowrap active:scale-95"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                <button onClick={() => { setEditingPromo(null); setIsPromoFormOpen(true); }} className="bg-violet-600 hover:bg-violet-700 text-white px-6 py-3.5 rounded-2xl font-black text-sm transition-all shadow-lg shadow-violet-100 flex items-center gap-2 whitespace-nowrap active:scale-95">
                   새 프로모션 등록
                 </button>
-                <div className="relative w-full md:w-80">
-                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <svg className="h-5 w-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                    </svg>
-                  </div>
-                  <input 
-                    type="text" 
-                    placeholder="프로모션 제목이나 혜택 검색" 
-                    value={promoSearchQuery}
-                    onChange={(e) => setPromoSearchQuery(e.target.value)}
-                    className="block w-full pl-11 pr-10 py-3.5 bg-white border-2 border-slate-100 rounded-2xl font-bold text-slate-800 text-sm placeholder:text-slate-300 focus:outline-none focus:border-violet-500 focus:bg-white transition-all shadow-sm"
-                  />
-                </div>
+                <input 
+                  type="text" 
+                  placeholder="프로모션 제목이나 혜택 검색" 
+                  value={promoSearchQuery}
+                  onChange={(e) => setPromoSearchQuery(e.target.value)}
+                  className="block w-full md:w-80 px-4 py-3.5 bg-white border-2 border-slate-100 rounded-2xl font-bold text-slate-800 text-sm focus:outline-none focus:border-violet-500 transition-all"
+                />
               </div>
             </div>
-
             {firebaseStatus === 'connecting' ? (
               <div className="flex flex-col items-center justify-center py-32 space-y-4">
                 <div className="w-12 h-12 border-4 border-violet-100 border-t-violet-600 rounded-full animate-spin"></div>
@@ -774,176 +728,92 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
             ) : filteredPromotions.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredPromotions.map((promo) => (
-                  <div key={promo.id} className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col hover:shadow-xl hover:border-violet-100 transition-all group relative">
+                  <div key={promo.id} className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col hover:shadow-xl transition-all">
                     <div className="p-8 flex-grow">
                       <div className="flex items-center justify-between mb-4">
                         <span className="bg-violet-600 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest">{promo.type}</span>
-                        <div className="flex gap-1">
-                          {promo.badge && (
-                            <span className="bg-red-50 text-red-500 px-2 py-0.5 rounded text-[10px] font-black border border-red-100">{promo.badge}</span>
-                          )}
-                          <button onClick={() => handleDeletePromo(promo.id)} className="text-slate-200 hover:text-red-400 transition-colors p-1">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                          </button>
-                        </div>
                       </div>
-                      <h3 className="text-xl font-bold text-slate-800 mb-4 group-hover:text-violet-600 transition-colors leading-tight">{promo.title}</h3>
+                      <h3 className="text-xl font-bold text-slate-800 mb-4">{promo.title}</h3>
                       <p className="text-sm text-slate-500 leading-relaxed mb-6 line-clamp-2">{promo.description}</p>
                     </div>
                     <div className="bg-slate-50 px-8 py-5 border-t border-slate-100 flex items-center justify-between">
-                      <button 
-                        onClick={() => { setEditingPromo(promo); setIsPromoFormOpen(true); }}
-                        className="text-[10px] font-black text-slate-400 hover:text-violet-600 uppercase tracking-widest"
-                      >
-                        Edit
-                      </button>
-                      <button 
-                        onClick={() => setSelectedPromoId(promo.id)}
-                        className="text-[11px] font-black text-violet-600 hover:bg-violet-600 hover:text-white border-2 border-violet-100 hover:border-violet-600 px-4 py-1.5 rounded-xl transition-all uppercase tracking-widest active:scale-95"
-                      >
-                        Details
-                      </button>
+                      <button onClick={() => { setEditingPromo(promo); setIsPromoFormOpen(true); }} className="text-[10px] font-black text-slate-400 hover:text-violet-600">Edit</button>
+                      <button onClick={() => setSelectedPromoId(promo.id)} className="text-[11px] font-black text-violet-600 border-2 border-violet-100 px-4 py-1.5 rounded-xl">Details</button>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
               <div className="bg-white rounded-[3rem] p-20 text-center border-2 border-dashed border-slate-100">
-                <div className="w-20 h-20 bg-slate-50 rounded-3xl flex items-center justify-center mx-auto mb-6">
-                  <svg className="w-10 h-10 text-slate-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                  </svg>
-                </div>
-                <h4 className="text-xl font-black text-slate-800 mb-2">결과가 없습니다</h4>
-                <p className="text-slate-400 font-medium">검색어를 수정하거나 새로운 프로모션을 등록해보세요.</p>
+                <h4 className="text-xl font-black text-slate-800 mb-2">게시물이 없습니다</h4>
+                <p className="text-slate-400 font-medium">새로운 프로모션을 가장 먼저 등록해보세요.</p>
               </div>
             )}
           </div>
         )}
       </main>
 
-      {/* 프로모션 등록/수정 모달 */}
       {isPromoFormOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsPromoFormOpen(false)}></div>
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => !isSaving && setIsPromoFormOpen(false)}></div>
           <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl relative overflow-hidden animate-slide-up flex flex-col max-h-[90vh]">
-            <div className="bg-violet-600 p-8 flex justify-between items-center flex-shrink-0">
-              <h3 className="text-white font-black text-xl">{editingPromo ? '프로모션 수정' : '새 프로모션 등록'}</h3>
-              <button onClick={() => setIsPromoFormOpen(false)} className="text-white/60 hover:text-white"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"/></svg></button>
+            <div className="bg-violet-600 p-8 flex justify-between items-center flex-shrink-0 text-white">
+              <h3 className="font-black text-xl">{editingPromo ? '프로모션 수정' : '새 프로모션 등록'}</h3>
+              <button disabled={isSaving} onClick={() => setIsPromoFormOpen(false)} className="text-white/60 hover:text-white"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"/></svg></button>
             </div>
             <form onSubmit={handleSavePromo} className="p-8 space-y-6 overflow-y-auto">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">제목</label>
-                  <input required name="title" defaultValue={editingPromo?.title} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none"/>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">유형</label>
-                  <input required name="type" defaultValue={editingPromo?.type} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none"/>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">시작일</label>
+              <input required name="title" defaultValue={editingPromo?.title} placeholder="제목 (필수)" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none"/>
+              <input required name="type" defaultValue={editingPromo?.type} placeholder="유형 (예: 사은품, 요금할인)" className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none"/>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 ml-1">시작일</label>
                   <input required type="date" name="startDate" defaultValue={editingPromo?.startDate} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none"/>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">종료일</label>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 ml-1">종료일</label>
                   <input required type="date" name="endDate" defaultValue={editingPromo?.endDate} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none"/>
                 </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">배지</label>
-                <input name="badge" defaultValue={editingPromo?.badge} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none"/>
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">요약 설명</label>
-                <input required name="description" defaultValue={editingPromo?.description} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none"/>
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">상세 소개글</label>
-                <textarea required name="longDescription" defaultValue={editingPromo?.longDescription} rows={3} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none resize-none"/>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">주요 혜택 (줄바꿈 구분)</label>
-                  <textarea name="benefits" defaultValue={editingPromo?.benefits.join('\n')} rows={4} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none resize-none"/>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">유의사항 (줄바꿈 구분)</label>
-                  <textarea name="terms" defaultValue={editingPromo?.terms.join('\n')} rows={4} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none resize-none"/>
-                </div>
-              </div>
-              <button type="submit" className="w-full bg-violet-600 hover:bg-violet-700 text-white font-black py-4 rounded-2xl shadow-xl shadow-violet-100 transition-all active:scale-95 text-lg">
-                저장하기
+              <textarea required name="longDescription" defaultValue={editingPromo?.longDescription} placeholder="상세 설명 (필수)" rows={3} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold resize-none focus:border-violet-500 outline-none"/>
+              <button 
+                type="submit" 
+                disabled={isSaving}
+                className={`w-full bg-violet-600 text-white font-black py-4 rounded-2xl shadow-xl transition-all active:scale-95 flex items-center justify-center gap-2 ${isSaving ? 'opacity-70 cursor-not-allowed' : 'hover:bg-violet-700'}`}
+              >
+                {isSaving && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>}
+                {editingPromo ? '수정사항 저장하기' : '클라우드에 등록하기'}
               </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* 하단 바 (계산기 뷰 전용) */}
       {currentView === 'calculator' && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-[0_-12px_40px_rgba(0,0,0,0.08)] z-40 backdrop-blur-md bg-white/95">
-          <div className="max-w-5xl mx-auto px-4 py-4 md:py-6">
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-xl z-40 backdrop-blur-md bg-white/95">
+          <div className="max-w-5xl mx-auto px-4 py-6">
             <div className="flex flex-col md:flex-row items-end md:items-center justify-between gap-4">
               <div className="flex flex-col gap-1 w-full md:w-auto">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-medium text-slate-500">
-                  <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-700 border border-slate-200">{INTERNET_PLANS.find(p => p.id === selections.internetId)?.name}</span>
-                  {selections.isFamilyPlan && <span className="bg-violet-50 text-violet-700 px-2 py-0.5 rounded border border-violet-100 font-bold">패밀리</span>}
-                  {isTvSelected && <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-700 border border-slate-200">{(tvType === 'IPTV' ? TV_PLANS : CATV_TV_PLANS).find(p => p.id === selections.tvId)?.name}</span>}
+                  <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-700">{INTERNET_PLANS.find(p => p.id === selections.internetId)?.name}</span>
+                  {selections.isFamilyPlan && <span className="bg-violet-50 text-violet-700 px-2 py-0.5 rounded font-bold">패밀리</span>}
                   <span className="bg-violet-600 text-white px-2 py-0.5 rounded font-black text-[10px] uppercase">{tvType}</span>
                 </div>
-                <div className="flex flex-wrap gap-2 mt-1">
-                  {discountBreakdown.bundle > 0 && <div className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded">기본결합 -{discountBreakdown.bundle.toLocaleString()}</div>}
-                  {discountBreakdown.mobile > 0 && <div className="text-[10px] text-violet-600 font-bold bg-violet-100 px-2 py-0.5 rounded">휴대폰 -{discountBreakdown.mobile.toLocaleString()}</div>}
-                  {discountBreakdown.prepaid > 0 && <div className="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded">선납권 -{discountBreakdown.prepaid.toLocaleString()}</div>}
-                </div>
               </div>
-
               <div className="flex items-center gap-4 md:gap-8 w-full md:w-auto justify-between md:justify-end">
-                <div className="flex items-center gap-6">
-                  {customerQuotedFee > 0 && (
-                    <div className="flex flex-col items-end">
-                      <div className="text-[10px] text-fuchsia-500 font-black mb-0.5 uppercase tracking-wider">선납권 추천</div>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-2xl font-black text-fuchsia-600 tracking-tighter">{recommendedPrepaid.toLocaleString()}</span>
-                        <span className="text-sm font-bold text-fuchsia-600">원</span>
-                      </div>
-                    </div>
-                  )}
-                  <div className="flex flex-col items-end border-l border-slate-100 pl-6">
-                    <div className="text-[10px] text-slate-400 font-black mb-0.5 uppercase tracking-wider">월 예상 납부액</div>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-4xl font-black text-violet-600 tracking-tighter">{totalPrice.toLocaleString()}</span>
-                      <span className="text-xl font-bold text-slate-900">원</span>
-                    </div>
+                <div className="flex flex-col items-end pl-6">
+                  <div className="text-[10px] text-slate-400 font-black uppercase tracking-wider">월 예상 납부액</div>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-4xl font-black text-violet-600 tracking-tighter">{totalPrice.toLocaleString()}</span>
+                    <span className="text-xl font-bold text-slate-900">원</span>
                   </div>
                 </div>
                 <button 
                   onClick={() => setIsShareModalOpen(true)}
-                  className="bg-violet-600 hover:bg-violet-700 text-white w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center shadow-lg active:scale-95 transition-all flex-shrink-0"
+                  className="bg-violet-600 text-white w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg active:scale-95 transition-all"
                 >
-                  <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
+                  <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 복사 미리보기 모달 */}
-      {isShareModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsShareModalOpen(false)}></div>
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm relative overflow-hidden animate-slide-up">
-            <div className="bg-violet-600 p-6 flex flex-col items-center">
-              <h3 className="text-white font-black text-xl">상담 내역 확인</h3>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 max-h-64 overflow-y-auto">
-                <pre className="text-xs text-slate-600 font-medium whitespace-pre-wrap leading-relaxed">{shareSummaryText}</pre>
-              </div>
-              <button onClick={handleCopyText} className="w-full bg-violet-600 hover:bg-violet-700 text-white font-black py-4 rounded-2xl">텍스트 복사하기</button>
-              <button onClick={() => setIsShareModalOpen(false)} className="w-full py-3 text-slate-400 text-xs font-bold">닫기</button>
             </div>
           </div>
         </div>
