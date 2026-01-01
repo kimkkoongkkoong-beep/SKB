@@ -3,7 +3,7 @@ import { InternetPlan, TVPlan, STBOption, MobileBundle, PlanOption } from './typ
 export const INTERNET_PLANS: InternetPlan[] = [
   {
     id: 'int_100m',
-    name: '광랜 +WIFI',
+    name: '100M (광랜)',
     speed: '100M',
     price: 23100,
     description: '웹서핑 및 일반적인 사용에 적합',
@@ -11,7 +11,7 @@ export const INTERNET_PLANS: InternetPlan[] = [
   },
   {
     id: 'int_500m',
-    name: '인터넷 Giga Lite +WIFI',
+    name: '500M (Giga Lite)',
     speed: '500M',
     price: 34100,
     description: '고화질 영상 스트리밍과 게임에 최적',
@@ -19,7 +19,7 @@ export const INTERNET_PLANS: InternetPlan[] = [
   },
   {
     id: 'int_1g',
-    name: '인터넷 Giga +WIFI',
+    name: '1G (Giga)',
     speed: '1G',
     price: 39600,
     description: '가장 빠른 속도와 안정적인 연결',
