@@ -9,8 +9,21 @@ import {
 } from './constants';
 import { SelectionState } from './types';
 
-// 프로모션 데이터 정의 (상세 내용 보강)
-const PROMOTIONS = [
+interface Promotion {
+  id: number;
+  title: string;
+  startDate: string;
+  endDate: string;
+  description: string;
+  longDescription: string;
+  badge: string;
+  type: string;
+  benefits: string[];
+  terms: string[];
+}
+
+// 초기 프로모션 데이터
+const INITIAL_PROMOTIONS: Promotion[] = [
   {
     id: 1,
     title: "봄 맞이 인터넷+TV 결합 사은품 증정 프로모션",
@@ -50,26 +63,6 @@ const PROMOTIONS = [
       "중도 요금제 하향 시 할인 혜택이 중단됨",
       "결합 할인과 별도로 추가 중복 적용 가능"
     ]
-  },
-  {
-    id: 3,
-    title: "기가급 인터넷 신규 가입 안심 서비스 3개월 무료",
-    startDate: "2024-04-01",
-    endDate: "2025-06-30",
-    description: "500M 이상 인터넷 가입 시 안심서비스를 3개월간 무료로 제공합니다.",
-    longDescription: "우리 가족의 안전한 인터넷 환경을 위한 필수 선택! 유해 사이트 차단부터 PC 점검까지 책임지는 안심서비스를 부담 없이 경험해보세요.",
-    badge: "NEW",
-    type: "무료제공",
-    benefits: [
-      "안심서비스(월 2,200원 상당) 3개월 이용료 전액 면제",
-      "PC/스마트폰 원격 점검 서비스 연 2회 무료",
-      "악성코드 및 피싱 사이트 실시간 차단 솔루션 제공"
-    ],
-    terms: [
-      "500M/1G 인터넷 신규 가입 고객 대상",
-      "무료 이용 기간 종료 후 유료로 자동 전환 (사전 안내 문자 발송)",
-      "무료 기간 중 해지 시 위약금 없음"
-    ]
   }
 ];
 
@@ -81,7 +74,7 @@ const CATV_TV_PLANS = [
 ];
 
 const CATV_STB_OPTIONS = [
-  { id: 'stb_smart3_pop', name: 'Smart 3_POP', price: 2200, description: 'pop 전용 스마트 셋톱박스' },
+  { id: 'stb_smart3_pop', name: 'Smart 3_POP', price: 2200, description: 'pop 전용 스마트 톱박스' },
   { id: 'stb_ai2_pop', name: 'AI2_POP', price: 4400, description: '누구(NUGU) 탑재 pop 전용 AI 셋톱박스' },
 ];
 
@@ -168,6 +161,16 @@ const App: React.FC = () => {
   const [selectedPromoId, setSelectedPromoId] = useState<number | null>(null);
   const [promoSearchQuery, setPromoSearchQuery] = useState('');
 
+  // 프로모션 데이터 상태 관리 (로컬 스토리지 연동)
+  const [promotions, setPromotions] = useState<Promotion[]>(() => {
+    const saved = localStorage.getItem('skb_promotions');
+    return saved ? JSON.parse(saved) : INITIAL_PROMOTIONS;
+  });
+
+  // 프로모션 편집 모드 상태
+  const [isPromoFormOpen, setIsPromoFormOpen] = useState(false);
+  const [editingPromo, setEditingPromo] = useState<Promotion | null>(null);
+
   const [tvType, setTvType] = useState<'IPTV' | 'CATV'>('IPTV');
   const [selections, setSelections] = useState<SelectionState>({
     internetId: 'int_500m', 
@@ -183,6 +186,10 @@ const App: React.FC = () => {
   });
 
   const [customerQuotedFee, setCustomerQuotedFee] = useState<number>(0);
+
+  useEffect(() => {
+    localStorage.setItem('skb_promotions', JSON.stringify(promotions));
+  }, [promotions]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -329,18 +336,54 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
   }, [selections.addOnIds]);
 
   const filteredPromotions = useMemo(() => {
-    if (!promoSearchQuery.trim()) return PROMOTIONS;
+    if (!promoSearchQuery.trim()) return promotions;
     const query = promoSearchQuery.toLowerCase();
-    return PROMOTIONS.filter(p => 
+    return promotions.filter(p => 
       p.title.toLowerCase().includes(query) || 
       p.description.toLowerCase().includes(query) ||
       p.type.toLowerCase().includes(query)
     );
-  }, [promoSearchQuery]);
+  }, [promoSearchQuery, promotions]);
 
   const selectedPromotion = useMemo(() => {
-    return PROMOTIONS.find(p => p.id === selectedPromoId);
-  }, [selectedPromoId]);
+    return promotions.find(p => p.id === selectedPromoId);
+  }, [selectedPromoId, promotions]);
+
+  const handleDeletePromo = (id: number) => {
+    if (window.confirm('이 프로모션을 삭제하시겠습니까?')) {
+      setPromotions(prev => prev.filter(p => p.id !== id));
+      if (selectedPromoId === id) setSelectedPromoId(null);
+    }
+  };
+
+  const handleSavePromo = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const benefitsStr = formData.get('benefits') as string;
+    const termsStr = formData.get('terms') as string;
+
+    const newPromo: Promotion = {
+      id: editingPromo ? editingPromo.id : Date.now(),
+      title: formData.get('title') as string,
+      startDate: formData.get('startDate') as string,
+      endDate: formData.get('endDate') as string,
+      type: formData.get('type') as string,
+      badge: formData.get('badge') as string,
+      description: formData.get('description') as string,
+      longDescription: formData.get('longDescription') as string,
+      benefits: benefitsStr.split('\n').filter(s => s.trim() !== ''),
+      terms: termsStr.split('\n').filter(s => s.trim() !== ''),
+    };
+
+    if (editingPromo) {
+      setPromotions(prev => prev.map(p => p.id === editingPromo.id ? newPromo : p));
+    } else {
+      setPromotions(prev => [newPromo, ...prev]);
+    }
+
+    setIsPromoFormOpen(false);
+    setEditingPromo(null);
+  };
 
   if (!isAuthenticated) {
     return (
@@ -400,7 +443,8 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
       <main className="max-w-5xl mx-auto px-4 pt-8">
         {currentView === 'calculator' ? (
           <div className="space-y-12 animate-fade-in">
-            {/* 업셀링 빠른선택 */}
+            {/* 요금 계산기 컨텐츠는 동일하므로 생략하거나 기존 로직 유지 */}
+            {/* 업셀링 빠른선택 섹션 시작 */}
             <section className="bg-gradient-to-br from-violet-50 to-white p-6 rounded-3xl border border-violet-100 shadow-sm">
               <SectionHeader title="업셀링 빠른선택" step="0" badge="Recommended">
                 <div className="flex flex-col sm:flex-row items-center gap-4 bg-white/80 backdrop-blur-sm px-4 py-2 rounded-xl border border-violet-200 shadow-sm w-full md:w-auto">
@@ -424,7 +468,6 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
               </div>
             </section>
 
-            {/* 인터넷 속도 */}
             <section>
               <SectionHeader title="인터넷 속도" step={1}>
                 <div className="flex items-center gap-3 bg-white border border-slate-200 px-4 py-2 rounded-2xl hover:border-violet-300 transition-colors shadow-sm">
@@ -442,7 +485,6 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
               </div>
             </section>
 
-            {/* 부가서비스 */}
             <section>
               <SectionHeader title="인터넷 부가서비스" step="1-1" />
               {isBothAddOnsSelected && (
@@ -458,7 +500,6 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
               </div>
             </section>
 
-            {/* TV 요금제 */}
             <section>
               <SectionHeader title={`${tvType} 요금제`} step={2} />
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
@@ -496,7 +537,6 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
               </div>
             </section>
 
-            {/* 선납권 할인 */}
             <section className="pb-10">
               <SectionHeader title="선납권 할인" step={4} />
               <div className="mb-4 p-4 bg-indigo-50 rounded-xl border border-indigo-100 flex items-center gap-3">
@@ -531,12 +571,21 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
               <h2 className="text-2xl font-black text-slate-800 tracking-tight">상세 정보</h2>
             </div>
 
-            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden relative">
+              <div className="absolute top-6 right-6 flex gap-2 z-10">
+                <button onClick={() => { setEditingPromo(selectedPromotion); setIsPromoFormOpen(true); }} className="bg-white/20 hover:bg-white/40 backdrop-blur-md text-white p-3 rounded-2xl border border-white/30 transition-all">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                </button>
+                <button onClick={() => handleDeletePromo(selectedPromotion.id)} className="bg-white/20 hover:bg-red-500 backdrop-blur-md text-white p-3 rounded-2xl border border-white/30 transition-all">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                </button>
+              </div>
+
               <div className="bg-gradient-to-br from-violet-600 to-indigo-700 p-10 md:p-16 text-white relative">
-                <div className="absolute top-8 right-8 bg-white/20 backdrop-blur-md px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest border border-white/30">
-                  {selectedPromotion.type}
-                </div>
                 <div className="max-w-2xl">
+                  <div className="inline-block bg-white/20 backdrop-blur-md px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest border border-white/30 mb-6">
+                    {selectedPromotion.type}
+                  </div>
                   <h3 className="text-3xl md:text-4xl font-black mb-6 leading-tight">{selectedPromotion.title}</h3>
                   <div className="flex flex-wrap items-center gap-4">
                     <div className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-xl border border-white/20 text-sm font-bold">
@@ -580,20 +629,22 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
                   </div>
                 </section>
 
-                <section className="bg-red-50/50 border border-red-100 rounded-[2rem] p-8 md:p-12">
-                  <h4 className="text-lg font-black text-red-600 mb-6 flex items-center gap-3">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                    가입 전 유의사항
-                  </h4>
-                  <ul className="space-y-4">
-                    {selectedPromotion.terms.map((term, idx) => (
-                      <li key={idx} className="flex items-start gap-3 text-red-700/80 text-sm font-bold leading-relaxed">
-                        <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0"></span>
-                        {term}
-                      </li>
-                    ))}
-                  </ul>
-                </section>
+                {selectedPromotion.terms.length > 0 && (
+                  <section className="bg-red-50/50 border border-red-100 rounded-[2rem] p-8 md:p-12">
+                    <h4 className="text-lg font-black text-red-600 mb-6 flex items-center gap-3">
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                      가입 전 유의사항
+                    </h4>
+                    <ul className="space-y-4">
+                      {selectedPromotion.terms.map((term, idx) => (
+                        <li key={idx} className="flex items-start gap-3 text-red-700/80 text-sm font-bold leading-relaxed">
+                          <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0"></span>
+                          {term}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
 
                 <div className="pt-8 border-t border-slate-100 flex justify-center">
                   <button 
@@ -616,6 +667,13 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
               </div>
               
               <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto">
+                <button 
+                  onClick={() => { setEditingPromo(null); setIsPromoFormOpen(true); }}
+                  className="bg-violet-600 hover:bg-violet-700 text-white px-6 py-3.5 rounded-2xl font-black text-sm transition-all shadow-lg shadow-violet-100 flex items-center gap-2 whitespace-nowrap active:scale-95"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                  새 프로모션 등록
+                </button>
                 <div className="relative w-full md:w-80">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                     <svg className="h-5 w-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -629,17 +687,6 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
                     onChange={(e) => setPromoSearchQuery(e.target.value)}
                     className="block w-full pl-11 pr-10 py-3.5 bg-white border-2 border-slate-100 rounded-2xl font-bold text-slate-800 text-sm placeholder:text-slate-300 focus:outline-none focus:border-violet-500 focus:bg-white transition-all shadow-sm"
                   />
-                  {promoSearchQuery && (
-                    <button 
-                      onClick={() => setPromoSearchQuery('')}
-                      className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-300 hover:text-slate-500 transition-colors"
-                    >
-                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
-                    </button>
-                  )}
-                </div>
-                <div className="bg-violet-50 text-violet-600 px-5 py-3 rounded-2xl text-xs font-black border border-violet-100 whitespace-nowrap">
-                  검색 결과: {filteredPromotions.length}개
                 </div>
               </div>
             </div>
@@ -647,13 +694,18 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
             {filteredPromotions.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredPromotions.map((promo) => (
-                  <div key={promo.id} className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col hover:shadow-xl hover:border-violet-100 transition-all group">
+                  <div key={promo.id} className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col hover:shadow-xl hover:border-violet-100 transition-all group relative">
                     <div className="p-8 flex-grow">
                       <div className="flex items-center justify-between mb-4">
                         <span className="bg-violet-600 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest">{promo.type}</span>
-                        {promo.badge && (
-                          <span className="bg-red-50 text-red-500 px-2 py-0.5 rounded text-[10px] font-black border border-red-100 animate-pulse">{promo.badge}</span>
-                        )}
+                        <div className="flex gap-1">
+                          {promo.badge && (
+                            <span className="bg-red-50 text-red-500 px-2 py-0.5 rounded text-[10px] font-black border border-red-100">{promo.badge}</span>
+                          )}
+                          <button onClick={() => handleDeletePromo(promo.id)} className="text-slate-200 hover:text-red-400 transition-colors p-1">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                          </button>
+                        </div>
                       </div>
                       <h3 className="text-xl font-bold text-slate-800 mb-4 group-hover:text-violet-600 transition-colors leading-tight">{promo.title}</h3>
                       <p className="text-sm text-slate-500 leading-relaxed mb-6 line-clamp-2">{promo.description}</p>
@@ -669,10 +721,12 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
                       </div>
                     </div>
                     <div className="bg-slate-50 px-8 py-5 border-t border-slate-100 flex items-center justify-between">
-                      <span className="text-[10px] font-black text-emerald-500 flex items-center gap-1.5 uppercase tracking-wider">
-                        <span className="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></span>
-                        Currently Active
-                      </span>
+                      <button 
+                        onClick={() => { setEditingPromo(promo); setIsPromoFormOpen(true); }}
+                        className="text-[10px] font-black text-slate-400 hover:text-violet-600 uppercase tracking-widest"
+                      >
+                        Edit
+                      </button>
                       <button 
                         onClick={() => setSelectedPromoId(promo.id)}
                         className="text-[11px] font-black text-violet-600 hover:bg-violet-600 hover:text-white border-2 border-violet-100 hover:border-violet-600 px-4 py-1.5 rounded-xl transition-all uppercase tracking-widest active:scale-95"
@@ -690,27 +744,75 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                   </svg>
                 </div>
-                <h4 className="text-xl font-black text-slate-800 mb-2">검색 결과가 없습니다</h4>
-                <p className="text-slate-400 font-medium">다른 검색어를 입력하거나 검색어를 초기화해보세요.</p>
-                <button 
-                  onClick={() => setPromoSearchQuery('')}
-                  className="mt-8 bg-slate-100 hover:bg-slate-200 text-slate-600 px-8 py-3 rounded-2xl font-black text-sm transition-all active:scale-95"
-                >
-                  검색 초기화
-                </button>
+                <h4 className="text-xl font-black text-slate-800 mb-2">결과가 없습니다</h4>
+                <p className="text-slate-400 font-medium">검색어를 수정하거나 새로운 프로모션을 등록해보세요.</p>
               </div>
             )}
-            
-            <div className="bg-slate-100 rounded-[2.5rem] p-10 text-center border-2 border-dashed border-slate-200">
-              <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
-                <svg className="w-8 h-8 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-              </div>
-              <h4 className="text-slate-800 font-bold mb-1">새로운 프로모션 준비 중</h4>
-              <p className="text-slate-400 text-sm">추가 예정인 프로모션이 업데이트될 예정입니다.</p>
-            </div>
           </div>
         )}
       </main>
+
+      {/* 프로모션 등록/수정 모달 */}
+      {isPromoFormOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsPromoFormOpen(false)}></div>
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl relative overflow-hidden animate-slide-up flex flex-col max-h-[90vh]">
+            <div className="bg-violet-600 p-8 flex justify-between items-center flex-shrink-0">
+              <h3 className="text-white font-black text-xl">{editingPromo ? '프로모션 수정' : '새 프로모션 등록'}</h3>
+              <button onClick={() => setIsPromoFormOpen(false)} className="text-white/60 hover:text-white"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"/></svg></button>
+            </div>
+            <form onSubmit={handleSavePromo} className="p-8 space-y-6 overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">제목</label>
+                  <input required name="title" defaultValue={editingPromo?.title} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none"/>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">유형 (사은품, 요금할인 등)</label>
+                  <input required name="type" defaultValue={editingPromo?.type} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none"/>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">시작일</label>
+                  <input required type="date" name="startDate" defaultValue={editingPromo?.startDate} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none"/>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">종료일</label>
+                  <input required type="date" name="endDate" defaultValue={editingPromo?.endDate} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none"/>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">배지 (HOT, NEW 등 - 선택)</label>
+                  <input name="badge" defaultValue={editingPromo?.badge} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none"/>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">요약 설명</label>
+                <input required name="description" defaultValue={editingPromo?.description} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none"/>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">상세 소개글</label>
+                <textarea required name="longDescription" defaultValue={editingPromo?.longDescription} rows={3} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none resize-none"/>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">주요 혜택 (줄바꿈으로 구분)</label>
+                  <textarea name="benefits" defaultValue={editingPromo?.benefits.join('\n')} rows={4} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none resize-none"/>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">유의사항 (줄바꿈으로 구분)</label>
+                  <textarea name="terms" defaultValue={editingPromo?.terms.join('\n')} rows={4} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold focus:border-violet-500 outline-none resize-none"/>
+                </div>
+              </div>
+
+              <button type="submit" className="w-full bg-violet-600 hover:bg-violet-700 text-white font-black py-4 rounded-2xl shadow-xl shadow-violet-100 transition-all active:scale-95 text-lg">
+                {editingPromo ? '수정 내용 저장' : '프로모션 등록하기'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* 하단 바 (계산기 뷰에서만 노출) */}
       {currentView === 'calculator' && (
