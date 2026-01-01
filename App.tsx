@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   INTERNET_PLANS, 
@@ -8,7 +7,7 @@ import {
   MOBILE_COMBINATION_DISCOUNTS 
 } from './constants';
 import { SelectionState } from './types';
-import { db, collection, addDoc, query, orderBy, onSnapshot } from './firebase';
+import { db, collection, addDoc, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc } from './firebase';
 import { QuerySnapshot, DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
 
 const CATV_TV_PLANS = [
@@ -36,7 +35,7 @@ const B_TV_2_POP_PRICES: Record<string, number> = {
 };
 
 interface Promotion {
-  id?: string;
+  id: string;
   title: string;
   category: string;
   description: string;
@@ -119,6 +118,7 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'calculator' | 'promotion'>('calculator');
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
   const [isPromoModalOpen, setIsPromoModalOpen] = useState<boolean>(false);
+  const [editingPromoId, setEditingPromoId] = useState<string | null>(null);
 
   // Firebase Promotions State
   const [promotions, setPromotions] = useState<Promotion[]>([]);
@@ -159,19 +159,55 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  const handleAddPromotion = async (e: React.FormEvent) => {
+  const handleSubmitPromotion = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await addDoc(collection(db, "promotions"), {
-        ...newPromo,
-        createdAt: new Date()
-      });
+      if (editingPromoId) {
+        // Update
+        const promoRef = doc(db, "promotions", editingPromoId);
+        await updateDoc(promoRef, {
+          ...newPromo,
+          updatedAt: new Date()
+        });
+      } else {
+        // Add
+        await addDoc(collection(db, "promotions"), {
+          ...newPromo,
+          createdAt: new Date()
+        });
+      }
       setIsPromoModalOpen(false);
+      setEditingPromoId(null);
       setNewPromo({ title: '', category: '전체', description: '', startDate: '', endDate: '' });
     } catch (error) {
-      console.error("Error adding promotion: ", error);
-      alert("등록 중 오류가 발생했습니다.");
+      console.error("Error submitting promotion: ", error);
+      alert("처리 중 오류가 발생했습니다.");
     }
+  };
+
+  const handleDeletePromotion = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (!window.confirm("정말로 이 프로모션을 삭제하시겠습니까?")) return;
+    try {
+      await deleteDoc(doc(db, "promotions", id));
+      alert("삭제되었습니다.");
+    } catch (error) {
+      console.error("Error deleting promotion: ", error);
+      alert("삭제 중 오류가 발생했습니다.");
+    }
+  };
+
+  const handleEditPromotionClick = (e: React.MouseEvent, promo: Promotion) => {
+    e.stopPropagation();
+    setEditingPromoId(promo.id);
+    setNewPromo({
+      title: promo.title,
+      category: promo.category,
+      description: promo.description,
+      startDate: promo.startDate,
+      endDate: promo.endDate
+    });
+    setIsPromoModalOpen(true);
   };
 
   const handleLogin = (e: React.FormEvent) => {
@@ -185,9 +221,9 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (tvType === 'CATV') {
-      setSelections(prev => ({ ...prev, tvId: 'pop_100', tv2Id: 'tv_none', stbId: 'stb_smart3_pop' }));
+      setSelections(prev => ({ ...prev, internetId: prev.internetId, tvId: 'pop_100', tv2Id: 'tv_none', stbId: 'stb_smart3_pop', addOnIds: prev.addOnIds, mobileLineCount: prev.mobileLineCount, prepaidInternet: prev.prepaidInternet, prepaidTv1: prev.prepaidTv1, prepaidTv2: prev.prepaidTv2, isFamilyPlan: prev.isFamilyPlan }));
     } else {
-      setSelections(prev => ({ ...prev, tvId: 'tv_lite', tv2Id: 'tv_none', stbId: 'stb_smart3' }));
+      setSelections(prev => ({ ...prev, internetId: prev.internetId, tvId: 'tv_lite', tv2Id: 'tv_none', stbId: 'stb_smart3', addOnIds: prev.addOnIds, mobileLineCount: prev.mobileLineCount, prepaidInternet: prev.prepaidInternet, prepaidTv1: prev.prepaidTv1, prepaidTv2: prev.prepaidTv2, isFamilyPlan: prev.isFamilyPlan }));
     }
   }, [tvType]);
 
@@ -657,7 +693,11 @@ ${recsText}
             <div className="flex justify-between items-center">
               <h2 className="text-3xl font-black text-slate-800 tracking-tight">현재 진행중인 프로모션</h2>
               <button 
-                onClick={() => setIsPromoModalOpen(true)}
+                onClick={() => {
+                  setEditingPromoId(null);
+                  setNewPromo({ title: '', category: '전체', description: '', startDate: '', endDate: '' });
+                  setIsPromoModalOpen(true);
+                }}
                 className="bg-pastel-500 hover:bg-pastel-600 text-white font-black px-6 py-3 rounded-2xl shadow-xl shadow-pastel-100 transition-all flex items-center gap-2 active:scale-95"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
@@ -675,13 +715,31 @@ ${recsText}
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 {promotions.map((promo) => (
-                  <div key={promo.id} className="bg-white glass rounded-4xl border border-white shadow-xl shadow-pastel-100/20 overflow-hidden group hover:shadow-2xl transition-all duration-300">
+                  <div key={promo.id} className="bg-white glass rounded-4xl border border-white shadow-xl shadow-pastel-100/20 overflow-hidden group hover:shadow-2xl transition-all duration-300 relative">
+                    {/* 수정/삭제 버튼 그룹 */}
+                    <div className="absolute top-6 right-6 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={(e) => handleEditPromotionClick(e, promo)}
+                        className="p-2 bg-white/90 rounded-lg text-slate-400 hover:text-pastel-500 hover:bg-white shadow-sm transition-colors"
+                        title="수정"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                      </button>
+                      <button 
+                        onClick={(e) => handleDeletePromotion(e, promo.id)}
+                        className="p-2 bg-white/90 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-white shadow-sm transition-colors"
+                        title="삭제"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                      </button>
+                    </div>
+
                     <div className="p-8">
                       <div className="flex justify-between items-start mb-4">
                         <span className="bg-pastel-50 text-pastel-500 px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase border border-pastel-100">
                           {promo.category}
                         </span>
-                        <span className="text-xs text-slate-300 font-bold italic">PROMO</span>
+                        <span className="text-xs text-slate-300 font-bold italic mr-12">PROMO</span>
                       </div>
                       <h3 className="text-xl font-black text-slate-800 mb-2 group-hover:text-pastel-600 transition-colors">{promo.title}</h3>
                       <p className="text-sm text-slate-400 font-medium leading-relaxed mb-6 line-clamp-3">{promo.description}</p>
@@ -820,13 +878,13 @@ ${recsText}
             <div className="bg-slate-900 p-8 flex justify-between items-center text-white">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 bg-pastel-500 rounded-lg flex items-center justify-center"><svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M11 3a1 1 0 10-2 0v1a1 1 0 102 0V3zM15.657 5.757a1 1 0 00-1.414-1.414l-.707.707a1 1 0 001.414 1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM5.05 6.464a1 1 0 10-1.414-1.414l.707-.707a1 1 0 001.414 1.414l-.707.707zM5 10a1 1 0 01-1 1H3a1 1 0 110-2h1a1 1 0 011 1zM8 16v-1a1 1 0 112 0v1a1 1 0 11-2 0zM13 16v-1a1 1 0 112 0v1a1 1 0 11-2 0zM16 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1z" /></svg></div>
-                <h2 className="font-extrabold text-lg tracking-tight">프로모션 등록</h2>
+                <h2 className="font-extrabold text-lg tracking-tight">{editingPromoId ? '프로모션 수정' : '프로모션 등록'}</h2>
               </div>
-              <button onClick={() => setIsPromoModalOpen(false)} className="p-2 hover:bg-white/10 rounded-xl transition-colors">
+              <button onClick={() => { setIsPromoModalOpen(false); setEditingPromoId(null); }} className="p-2 hover:bg-white/10 rounded-xl transition-colors">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            <form onSubmit={handleAddPromotion} className="p-8 space-y-6">
+            <form onSubmit={handleSubmitPromotion} className="p-8 space-y-6">
               <div className="space-y-4">
                 <div>
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2 mb-1 block">프로모션 제목</label>
@@ -891,7 +949,7 @@ ${recsText}
                 type="submit" 
                 className="w-full bg-pastel-500 hover:bg-pastel-600 text-white py-5 rounded-3xl font-black shadow-xl shadow-pastel-100 transition-all active:scale-95"
               >
-                등록하기
+                {editingPromoId ? '수정 완료' : '등록하기'}
               </button>
             </form>
           </div>
