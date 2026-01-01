@@ -733,12 +733,21 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
                       <div className="flex items-center justify-between mb-4">
                         <span className="bg-violet-600 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest">{promo.type}</span>
                       </div>
-                      <h3 className="text-xl font-bold text-slate-800 mb-4">{promo.title}</h3>
+                      <h3 className="text-xl font-bold text-slate-800 mb-2">{promo.title}</h3>
+                      
+                      {/* 이벤트 기간 표시 추가 */}
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 mb-4">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                        </svg>
+                        <span>{promo.startDate.replace(/-/g, '.')} ~ {promo.endDate.replace(/-/g, '.')}</span>
+                      </div>
+
                       <p className="text-sm text-slate-500 leading-relaxed mb-6 line-clamp-2">{promo.description}</p>
                     </div>
                     <div className="bg-slate-50 px-8 py-5 border-t border-slate-100 flex items-center justify-between">
                       <button onClick={() => { setEditingPromo(promo); setIsPromoFormOpen(true); }} className="text-[10px] font-black text-slate-400 hover:text-violet-600">Edit</button>
-                      <button onClick={() => setSelectedPromoId(promo.id)} className="text-[11px] font-black text-violet-600 border-2 border-violet-100 px-4 py-1.5 rounded-xl">Details</button>
+                      <button onClick={() => setSelectedPromoId(promo.id)} className="text-[11px] font-black text-violet-600 border-2 border-violet-100 px-4 py-1.5 rounded-xl transition-all hover:bg-violet-600 hover:text-white hover:border-violet-600 active:scale-95">Details</button>
                     </div>
                   </div>
                 ))}
