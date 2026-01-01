@@ -636,7 +636,7 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
               <SectionHeader title="선납권 할인" step={4} />
               <div className="mb-4 p-4 bg-indigo-50 rounded-xl border border-indigo-100 flex items-center gap-3">
                 <div className="w-6 h-6 bg-indigo-600 rounded-full flex items-center justify-center text-white text-[10px] font-bold">i</div>
-                <p className="text-xs font-bold text-indigo-700">-8,800원 선납권은 골든대구, 레드 지점에서만 사용 가능합니다.</p>
+                <p className="text-xs font-bold text-indigo-700">-8,800원 선납권은 골든대구만 사용가능합니다.</p>
               </div>
               <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-8">
                 {['prepaidInternet', 'prepaidTv1', 'prepaidTv2'].map((key, idx) => (
@@ -645,7 +645,7 @@ TV 1: ${tv1 ? `${tv1.name} (${stb?.name})` : '없음'}
                     <select value={(selections as any)[key]} onChange={(e) => setSelections(prev => ({ ...prev, [key]: Number(e.target.value) }))} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 font-bold text-slate-800 outline-none focus:border-violet-500 cursor-pointer">
                       <option value={0}>할인 없음</option>
                       {Array.from({ length: 8 }, (_, i) => (i + 1) * 1100).map(val => (
-                        <option key={val} value={val}>-{val.toLocaleString()}원 {val === 8800 ? '(골든대구/레드)' : ''}</option>
+                        <option key={val} value={val}>-{val.toLocaleString()}원 {val === 8800 ? '(골든대구)' : ''}</option>
                       ))}
                     </select>
                   </div>
