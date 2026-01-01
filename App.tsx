@@ -9,6 +9,7 @@ import {
 } from './constants';
 import { SelectionState } from './types';
 import { db, collection, addDoc, query, orderBy, onSnapshot } from './firebase';
+import { QuerySnapshot, DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
 
 const CATV_TV_PLANS = [
   { id: 'pop_100', name: 'B tv pop 100', price: 7700, channels: 100, description: '가성비 중심의 실속 케이블 방송' },
@@ -148,8 +149,8 @@ const App: React.FC = () => {
   useEffect(() => {
     // Real-time listener for promotions
     const q = query(collection(db, "promotions"), orderBy("createdAt", "desc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const promoList = snapshot.docs.map(doc => ({
+    const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
+      const promoList = snapshot.docs.map((doc: QueryDocumentSnapshot<DocumentData>) => ({
         id: doc.id,
         ...doc.data()
       })) as Promotion[];
@@ -272,7 +273,7 @@ const App: React.FC = () => {
       totalPrice: Math.max(0, base - breakdown.bundle - breakdown.mobile - breakdown.prepaid - breakdown.stb - breakdown.family), 
       discountBreakdown: breakdown,
       isTvSelected: hasTv,
-      currentAddOns: selections.addOnIds.map(id => INTERNET_ADD_ONS.find(a => a.id === id)?.name).filter(Boolean) as string[]
+      currentAddOns: selections.addOnIds.map(id => INTERNET_ADD_ONS.find(a => id === a.id)?.name).filter(Boolean) as string[]
     };
   }, [selections, tvType]);
 
@@ -410,7 +411,6 @@ ${recsText}
     <div className="min-h-screen pb-72 bg-pastel-50/30 selection:bg-pastel-100">
       <header className="glass border-b border-pastel-100/50 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between relative">
-          {/* 타이틀: 왼쪽 배치 */}
           <div className="flex items-center gap-3 shrink-0">
             <div className="w-9 h-9 bg-gradient-to-br from-pastel-400 to-pastel-600 rounded-xl flex items-center justify-center shadow-lg shadow-pastel-100">
               <span className="text-white font-black text-[10px] italic">SK</span>
@@ -420,7 +420,6 @@ ${recsText}
             </h1>
           </div>
           
-          {/* 메뉴: 정중앙 배치 */}
           <nav className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 bg-slate-100/50 p-1 rounded-2xl border border-slate-200/50">
             <button 
               onClick={() => setActiveTab('calculator')}
@@ -436,7 +435,6 @@ ${recsText}
             </button>
           </nav>
 
-          {/* 로그아웃: 오른쪽 배치 */}
           <div className="shrink-0">
             <button 
               onClick={() => setIsAuthenticated(false)} 
@@ -451,7 +449,6 @@ ${recsText}
       <main className="max-w-6xl mx-auto px-6 pt-12">
         {activeTab === 'calculator' ? (
           <div className="space-y-16">
-            {/* 업셀링 퀵 메뉴 */}
             <section className="bg-white/80 glass p-8 rounded-4xl border border-white shadow-xl shadow-pastel-100/30">
               <SectionHeader title="퀵 업셀 설계" step="0">
                 <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
@@ -490,7 +487,6 @@ ${recsText}
               </div>
             </section>
 
-            {/* 속도 선택 (인터넷) */}
             <section className="animate-fade-in-up">
               <SectionHeader title="속도 선택" step={1}>
                 <button 
@@ -539,7 +535,6 @@ ${recsText}
               </div>
             </section>
 
-            {/* B tv 1 */}
             <section className="animate-fade-in-up">
               <SectionHeader title="B tv 1" step={2} />
               <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
@@ -609,7 +604,6 @@ ${recsText}
               </div>
             )}
 
-            {/* 모바일 결합 */}
             <section className="animate-fade-in-up">
               <SectionHeader title="요즘가족결합" step={3} />
               <div className="bg-white p-10 rounded-4xl border border-white shadow-xl shadow-pastel-100/20 flex flex-col md:flex-row justify-between items-center gap-8">
@@ -634,7 +628,6 @@ ${recsText}
               </div>
             </section>
 
-            {/* 선납권 적용 */}
             <section className="animate-fade-in-up">
               <SectionHeader title="선납권 적용" step={4} />
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -705,12 +698,10 @@ ${recsText}
         )}
       </main>
 
-      {/* 하단 요금 바 (Calculator 전용) */}
       {activeTab === 'calculator' && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[92%] max-w-5xl z-50">
           <div className="glass border border-white/40 shadow-[0_30px_60px_-15px_rgba(139,92,246,0.3)] rounded-4xl p-6 md:p-8 flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex flex-col items-center md:items-start gap-3 shrink-0">
-              {/* 결합할인내역 표시 */}
               {activeDiscounts.length > 0 && (
                 <div className="flex flex-wrap justify-center md:justify-start gap-x-2 gap-y-0.5 py-1.5 px-3 bg-rose-50/40 rounded-2xl border border-rose-100/50 animate-fade-in-up">
                   {activeDiscounts.map((disc, idx) => (
@@ -731,7 +722,6 @@ ${recsText}
             </div>
             
             <div className="flex flex-col items-center md:items-end w-full text-center md:text-right">
-              {/* 요금 분석 및 선납권 추천 */}
               <div className="flex flex-col items-center md:items-end gap-2 mb-4 w-full">
                 {quotedPriceAnalysis && (
                   <div className="flex flex-col md:flex-row flex-wrap justify-center md:justify-end gap-3 items-center w-full">
@@ -793,7 +783,6 @@ ${recsText}
         </div>
       )}
 
-      {/* 설계 리포트 모달 */}
       {isShareModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-6">
           <div className="bg-white rounded-5xl w-full max-w-lg overflow-hidden shadow-2xl animate-fade-in-up border border-white">
@@ -825,7 +814,6 @@ ${recsText}
         </div>
       )}
 
-      {/* 프로모션 등록 모달 */}
       {isPromoModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-6">
           <div className="bg-white rounded-5xl w-full max-w-lg overflow-hidden shadow-2xl animate-fade-in-up border border-white">
