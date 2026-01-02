@@ -122,10 +122,34 @@ const PlanCard: React.FC<{
   </button>
 );
 
+const JotForm: React.FC = () => {
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = "https://form.jotform.com/jsform/253587505466063";
+    script.type = "text/javascript";
+    script.async = true;
+    const container = document.getElementById('jotform-container');
+    if (container) {
+      container.appendChild(script);
+    }
+    return () => {
+      if (container) {
+        container.innerHTML = '';
+      }
+    };
+  }, []);
+
+  return (
+    <div className="bg-white rounded-4xl p-4 md:p-8 shadow-xl shadow-pastel-100/20 min-h-[800px] overflow-hidden">
+      <div id="jotform-container" className="w-full"></div>
+    </div>
+  );
+};
+
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [password, setPassword] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'calculator' | 'promotion' | 'manual'>('calculator');
+  const [activeTab, setActiveTab] = useState<'calculator' | 'promotion' | 'manual' | 'application'>('calculator');
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
   const [isPromoModalOpen, setIsPromoModalOpen] = useState<boolean>(false);
   const [isManualModalOpen, setIsManualModalOpen] = useState<boolean>(false);
@@ -459,10 +483,11 @@ ${recsText}
             <div className="w-9 h-9 bg-gradient-to-br from-pastel-400 to-pastel-600 rounded-xl flex items-center justify-center shadow-lg shadow-pastel-100"><span className="text-white font-black text-[10px] italic">SK</span></div>
             <h1 className="text-xl font-black tracking-tight text-slate-800 hidden sm:block">업셀 마스터 <span className="text-pastel-400 font-medium ml-1">Pro</span></h1>
           </div>
-          <nav className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 bg-slate-100/50 p-1 rounded-2xl border border-slate-200/50">
-            <button onClick={() => setActiveTab('calculator')} className={`px-4 sm:px-6 py-2 text-xs font-black rounded-xl transition-all ${activeTab === 'calculator' ? 'bg-white text-pastel-600 shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600'}`}>요금계산기</button>
-            <button onClick={() => setActiveTab('promotion')} className={`px-4 sm:px-6 py-2 text-xs font-black rounded-xl transition-all ${activeTab === 'promotion' ? 'bg-white text-pastel-600 shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600'}`}>프로모션</button>
-            <button onClick={() => setActiveTab('manual')} className={`px-4 sm:px-6 py-2 text-xs font-black rounded-xl transition-all ${activeTab === 'manual' ? 'bg-white text-pastel-600 shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600'}`}>업무메뉴얼</button>
+          <nav className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1 bg-slate-100/50 p-1 rounded-2xl border border-slate-200/50 overflow-x-auto max-w-[calc(100vw-180px)] no-scrollbar">
+            <button onClick={() => setActiveTab('calculator')} className={`whitespace-nowrap px-3 sm:px-4 py-2 text-xs font-black rounded-xl transition-all ${activeTab === 'calculator' ? 'bg-white text-pastel-600 shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600'}`}>요금계산기</button>
+            <button onClick={() => setActiveTab('promotion')} className={`whitespace-nowrap px-3 sm:px-4 py-2 text-xs font-black rounded-xl transition-all ${activeTab === 'promotion' ? 'bg-white text-pastel-600 shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600'}`}>프로모션</button>
+            <button onClick={() => setActiveTab('manual')} className={`whitespace-nowrap px-3 sm:px-4 py-2 text-xs font-black rounded-xl transition-all ${activeTab === 'manual' ? 'bg-white text-pastel-600 shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600'}`}>업무메뉴얼</button>
+            <button onClick={() => setActiveTab('application')} className={`whitespace-nowrap px-3 sm:px-4 py-2 text-xs font-black rounded-xl transition-all ${activeTab === 'application' ? 'bg-white text-pastel-600 shadow-sm border border-slate-100' : 'text-slate-400 hover:text-slate-600'}`}>신청서</button>
           </nav>
           <div className="shrink-0"><button onClick={() => setIsAuthenticated(false)} className="text-[10px] font-bold text-slate-400 hover:text-pastel-500 transition-colors uppercase tracking-widest px-2">Logout</button></div>
         </div>
@@ -576,6 +601,15 @@ ${recsText}
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {activeTab === 'application' && (
+          <div className="animate-fade-in-up space-y-10">
+            <div className="flex justify-between items-center">
+              <h2 className="text-3xl font-black text-slate-800 tracking-tight">서비스 신청서</h2>
+            </div>
+            <JotForm />
           </div>
         )}
       </main>
