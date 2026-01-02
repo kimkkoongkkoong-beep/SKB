@@ -9,7 +9,7 @@ import {
   MOBILE_COMBINATION_DISCOUNTS 
 } from './constants';
 import { SelectionState } from './types';
-import { db, collection, addDoc, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc } from './firebase';
+import { db, collection, addDoc, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc, getDoc, where } from './firebase';
 import { QuerySnapshot, DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
 
 const CATV_TV_PLANS = [
@@ -53,7 +53,22 @@ interface Manual {
   description: string;
   processMethod: string;
   createdAt: any;
+  updatedAt?: any;
 }
+
+interface ManualRevision {
+  id: string;
+  manualId: string;
+  editedAt: any;
+  editorName: string;
+  previousState: {
+    title: string;
+    category: string;
+    description: string;
+    processMethod: string;
+  };
+}
+
 
 const SectionHeader: React.FC<{ title: string; step: string | number; badge?: string; children?: React.ReactNode }> = ({ title, step, badge, children }) => (
   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
@@ -158,6 +173,9 @@ const App: React.FC = () => {
   const [selectedManual, setSelectedManual] = useState<Manual | null>(null);
   const [editingPromoId, setEditingPromoId] = useState<string | null>(null);
   const [editingManualId, setEditingManualId] = useState<string | null>(null);
+  
+  const [revisionHistory, setRevisionHistory] = useState<ManualRevision[]>([]);
+  const [viewingRevision, setViewingRevision] = useState<ManualRevision | null>(null);
 
   // Firebase State
   const [promotions, setPromotions] = useState<Promotion[]>([]);
@@ -175,7 +193,8 @@ const App: React.FC = () => {
     title: '',
     category: '일반',
     description: '',
-    processMethod: ''
+    processMethod: '',
+    editorName: '' 
   });
 
   const [tvType, setTvType] = useState<'IPTV' | 'CATV'>('IPTV');
@@ -221,6 +240,28 @@ const App: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (!isManualDetailOpen || !selectedManual) {
+        setRevisionHistory([]);
+        return;
+    }
+
+    const q = query(
+        collection(db, "manual_revisions"),
+        where("manualId", "==", selectedManual.id),
+        orderBy("editedAt", "desc")
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+        const history = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        })) as ManualRevision[];
+        setRevisionHistory(history);
+    });
+
+    return () => unsubscribe();
+  }, [isManualDetailOpen, selectedManual]);
+
   const handleSubmitPromotion = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -247,23 +288,52 @@ const App: React.FC = () => {
   const handleSubmitManual = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      if (editingManualId) {
-        await updateDoc(doc(db, "manuals", editingManualId), {
-          ...newManual,
-          updatedAt: new Date()
-        });
-      } else {
-        await addDoc(collection(db, "manuals"), {
-          ...newManual,
-          createdAt: new Date()
-        });
-      }
-      setIsManualModalOpen(false);
-      setEditingManualId(null);
-      setNewManual({ title: '', category: '일반', description: '', processMethod: '' });
+        if (editingManualId) {
+            if (!newManual.editorName?.trim()) {
+                alert("수정자 이름을 입력해주세요.");
+                return;
+            }
+
+            const manualRef = doc(db, "manuals", editingManualId);
+            const manualSnap = await getDoc(manualRef);
+
+            if (manualSnap.exists()) {
+                const currentData = manualSnap.data();
+                await addDoc(collection(db, "manual_revisions"), {
+                    manualId: editingManualId,
+                    editedAt: new Date(),
+                    editorName: newManual.editorName,
+                    previousState: {
+                        title: currentData.title,
+                        category: currentData.category,
+                        description: currentData.description,
+                        processMethod: currentData.processMethod,
+                    }
+                });
+            } else {
+                console.error("수정 이력을 생성할 원본 문서를 찾을 수 없습니다.");
+                alert("오류가 발생했습니다: 원본 문서를 찾을 수 없습니다.");
+                return;
+            }
+
+            const { editorName, ...manualData } = newManual;
+            await updateDoc(manualRef, {
+                ...manualData,
+                updatedAt: new Date()
+            });
+        } else {
+            const { editorName, ...manualData } = newManual;
+            await addDoc(collection(db, "manuals"), {
+                ...manualData,
+                createdAt: new Date()
+            });
+        }
+        setIsManualModalOpen(false);
+        setEditingManualId(null);
+        setNewManual({ title: '', category: '일반', description: '', processMethod: '', editorName: '' });
     } catch (error) {
-      console.error(error);
-      alert("오류가 발생했습니다.");
+        console.error("메뉴얼 저장 오류:", error);
+        alert("오류가 발생했습니다.");
     }
   };
 
@@ -602,12 +672,12 @@ ${recsText}
 
         {activeTab === 'manual' && (
           <div className="animate-fade-in-up space-y-10">
-            <div className="flex justify-between items-center"><h2 className="text-3xl font-black text-slate-800 tracking-tight">업무 메뉴얼 게시판</h2><button onClick={() => { setEditingManualId(null); setNewManual({ title: '', category: '일반', description: '', processMethod: '' }); setIsManualModalOpen(true); }} className="bg-indigo-500 hover:bg-indigo-600 text-white font-black px-6 py-3 rounded-2xl shadow-xl shadow-indigo-100 transition-all flex items-center gap-2 active:scale-95"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>메뉴얼 작성</button></div>
+            <div className="flex justify-between items-center"><h2 className="text-3xl font-black text-slate-800 tracking-tight">업무 메뉴얼 게시판</h2><button onClick={() => { setEditingManualId(null); setNewManual({ title: '', category: '일반', description: '', processMethod: '', editorName: '' }); setIsManualModalOpen(true); }} className="bg-indigo-500 hover:bg-indigo-600 text-white font-black px-6 py-3 rounded-2xl shadow-xl shadow-indigo-100 transition-all flex items-center gap-2 active:scale-95"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>메뉴얼 작성</button></div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {manuals.map((manual) => (
                 <div key={manual.id} onClick={() => { setSelectedManual(manual); setIsManualDetailOpen(true); }} className="bg-white glass rounded-4xl border border-white shadow-xl shadow-pastel-100/20 overflow-hidden group hover:shadow-2xl transition-all cursor-pointer relative">
                   <div className="absolute top-6 right-6 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={(e) => { e.stopPropagation(); setEditingManualId(manual.id); setNewManual(manual); setIsManualModalOpen(true); }} className="p-2 bg-white/90 rounded-lg text-slate-400 hover:text-indigo-500 shadow-sm"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
+                    <button onClick={(e) => { e.stopPropagation(); setEditingManualId(manual.id); setNewManual({ ...manual, editorName: '' }); setIsManualModalOpen(true); }} className="p-2 bg-white/90 rounded-lg text-slate-400 hover:text-indigo-500 shadow-sm"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
                     <button onClick={async (e) => { e.stopPropagation(); if(confirm("삭제하시겠습니까?")) await deleteDoc(doc(db, "manuals", manual.id)); }} className="p-2 bg-white/90 rounded-lg text-slate-400 hover:text-rose-500 shadow-sm"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
                   </div>
                   <div className="p-8">
@@ -634,6 +704,40 @@ ${recsText}
         )}
       </main>
 
+      {/* Revision Detail Modal */}
+      {viewingRevision && (
+          <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[120] flex items-center justify-center p-6">
+              <div className="bg-white rounded-5xl w-full max-w-2xl overflow-hidden shadow-2xl animate-fade-in-up border border-white">
+                  <div className="bg-slate-900 p-8 flex justify-between items-center text-white">
+                      <div>
+                          <h2 className="font-extrabold text-lg tracking-tight">수정 이력 상세 (이전 버전)</h2>
+                          <p className="text-sm text-slate-400">{viewingRevision.editorName} 님의 수정 ({viewingRevision.editedAt.toDate().toLocaleString('ko-KR')})</p>
+                      </div>
+                      <button onClick={() => setViewingRevision(null)} className="p-2 hover:bg-white/10 rounded-xl transition-colors">
+                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
+                  </div>
+                  <div className="p-10 space-y-8 max-h-[70vh] overflow-y-auto">
+                      <div>
+                          <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 border-b border-slate-100 pb-2">제목</h4>
+                          <p className="text-slate-800 font-bold">{viewingRevision.previousState.title}</p>
+                      </div>
+                      <div>
+                          <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 border-b border-slate-100 pb-2">상세 설명</h4>
+                          <div className="manual-content" dangerouslySetInnerHTML={{ __html: viewingRevision.previousState.description }} />
+                      </div>
+                      <div className="bg-slate-50 rounded-3xl p-8 border border-slate-100">
+                          <h4 className="text-xs font-black text-indigo-500 uppercase tracking-widest mb-4 flex items-center gap-2"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>전산 처리 방법</h4>
+                          <p className="text-slate-600 leading-relaxed whitespace-pre-wrap font-bold text-sm">{viewingRevision.previousState.processMethod}</p>
+                      </div>
+                  </div>
+                  <div className="p-6 bg-slate-50/50 flex justify-end">
+                      <button onClick={() => setViewingRevision(null)} className="px-8 py-3 bg-slate-200 text-slate-600 rounded-2xl font-black text-sm hover:bg-slate-300 transition-all">닫기</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {/* Manual Detail Modal */}
       {isManualDetailOpen && selectedManual && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[110] flex items-center justify-center p-6">
@@ -654,6 +758,27 @@ ${recsText}
                 <h4 className="text-xs font-black text-indigo-500 uppercase tracking-widest mb-4 flex items-center gap-2"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>전산 처리 방법</h4>
                 <p className="text-slate-600 leading-relaxed whitespace-pre-wrap font-bold text-sm">{selectedManual.processMethod}</p>
               </div>
+              {revisionHistory.length > 0 && (
+                <div className="bg-slate-50 rounded-3xl p-8 border border-slate-100">
+                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        수정 이력
+                    </h4>
+                    <ul className="space-y-3">
+                        {revisionHistory.map(rev => (
+                            <li key={rev.id} className="flex justify-between items-center p-3 bg-white rounded-xl border border-slate-200/60">
+                                <div>
+                                    <span className="font-bold text-slate-700 text-sm">{rev.editorName}</span>
+                                    <span className="text-xs text-slate-400 ml-2">{rev.editedAt.toDate().toLocaleString('ko-KR')}</span>
+                                </div>
+                                <button onClick={() => setViewingRevision(rev)} className="text-xs font-bold text-indigo-500 hover:underline">
+                                    변경내용 보기
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+              )}
             </div>
             <div className="p-6 bg-slate-50/50 flex justify-end">
               <button onClick={() => setIsManualDetailOpen(false)} className="px-8 py-3 bg-slate-200 text-slate-600 rounded-2xl font-black text-sm hover:bg-slate-300 transition-all">닫기</button>
@@ -676,6 +801,12 @@ ${recsText}
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">제목</label>
                   <input required type="text" placeholder="메뉴얼 제목을 입력하세요" value={newManual.title} onChange={e => setNewManual({...newManual, title: e.target.value})} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-bold text-slate-700 outline-none focus:border-indigo-200 focus:bg-white transition-all" />
                 </div>
+                {editingManualId && (
+                  <div>
+                    <label className="text-[10px] font-black text-rose-500 uppercase tracking-widest block mb-1">수정자 이름 (필수)</label>
+                    <input required type="text" placeholder="수정자 이름을 입력하세요" value={newManual.editorName} onChange={e => setNewManual({...newManual, editorName: e.target.value})} className="w-full bg-rose-50 border-2 border-rose-100 rounded-2xl px-5 py-3 font-bold text-rose-900 outline-none focus:border-rose-300 focus:bg-white transition-all" />
+                  </div>
+                )}
                 <div>
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">카테고리</label>
                   <select value={newManual.category} onChange={e => setNewManual({...newManual, category: e.target.value})} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-bold text-slate-700 outline-none focus:border-indigo-200 focus:bg-white transition-all appearance-none"><option value="일반">일반</option><option value="전산">전산</option><option value="접수">접수</option><option value="해지">해지</option></select>
