@@ -11,6 +11,7 @@
     <title>SKB 요금 계산기</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/react-quill@2.0.0/dist/quill.snow.css" rel="stylesheet">
     <script>
         tailwind.config = {
             theme: {
@@ -75,6 +76,33 @@
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
         }
+        /* Quill Editor & Rendered Content Styles */
+        .ql-editor {
+            min-height: 120px;
+        }
+        .manual-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1em;
+            margin-bottom: 1em;
+        }
+        .manual-content th, .manual-content td {
+            border: 1px solid #e2e8f0;
+            padding: 0.5em 0.75em;
+            text-align: left;
+        }
+        .manual-content th {
+            background-color: #f8fafc;
+            font-weight: 800;
+        }
+        .manual-content ol, .manual-content ul {
+            padding-left: 1.5em;
+            margin-top: 0.5em;
+            margin-bottom: 0.5em;
+        }
+        .manual-content li {
+            margin-bottom: 0.25em;
+        }
     </style>
 <script type="importmap">
 {
@@ -85,7 +113,9 @@
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "react/": "https://esm.sh/react@^19.2.3/",
     "vite": "https://esm.sh/vite@^7.3.0",
-    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "firebase/": "https://esm.sh/firebase@^12.7.0/",
+    "react-quill": "https://esm.sh/react-quill@2.0.0"
   }
 }
 </script>
