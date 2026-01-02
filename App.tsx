@@ -248,14 +248,16 @@ const App: React.FC = () => {
 
     const q = query(
         collection(db, "manual_revisions"),
-        where("manualId", "==", selectedManual.id),
-        orderBy("editedAt", "desc")
+        where("manualId", "==", selectedManual.id)
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
         const history = snapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
         })) as ManualRevision[];
+        
+        history.sort((a, b) => b.editedAt.toDate().getTime() - a.editedAt.toDate().getTime());
+
         setRevisionHistory(history);
     });
 
