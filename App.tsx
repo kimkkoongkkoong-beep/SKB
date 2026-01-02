@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
+import ReactQuill from 'react-quill';
 import { 
   INTERNET_PLANS, 
   INTERNET_ADD_ONS,
@@ -455,6 +456,25 @@ ${recsText}
     };
   }, [selections, tvType, currentAddOns, totalPrice, quotedPriceAnalysis, discountBreakdown, currentEffectiveStbPrice]);
 
+  const quillModules = {
+    toolbar: [
+      [{ 'header': [1, 2, 3, false] }],
+      ['bold', 'italic', 'underline','strike'],
+      [{'list': 'ordered'}, {'list': 'bullet'}],
+      ['link'],
+      ['table'],
+      ['clean']
+    ],
+  };
+
+  const quillFormats = [
+    'header',
+    'bold', 'italic', 'underline', 'strike',
+    'list', 'bullet',
+    'link',
+    'table'
+  ];
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-pastel-50 flex items-center justify-center p-6 relative overflow-hidden">
@@ -595,7 +615,7 @@ ${recsText}
                       <span className={`px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase border ${manual.category === '전산' ? 'bg-indigo-50 text-indigo-500 border-indigo-100' : 'bg-emerald-50 text-emerald-500 border-emerald-100'}`}>{manual.category}</span>
                     </div>
                     <h3 className="text-xl font-black text-slate-800 mb-2 group-hover:text-indigo-600 transition-colors">{manual.title}</h3>
-                    <p className="text-sm text-slate-400 font-medium leading-relaxed mb-6 line-clamp-3">{manual.description}</p>
+                    <div className="text-sm text-slate-400 font-medium leading-relaxed mb-6 line-clamp-3 manual-content" dangerouslySetInnerHTML={{ __html: manual.description }}></div>
                     <div className="text-[10px] font-bold text-slate-300 flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>자세히 보려면 클릭하세요</div>
                   </div>
                 </div>
@@ -628,7 +648,7 @@ ${recsText}
             <div className="p-10 space-y-8 max-h-[70vh] overflow-y-auto">
               <div>
                 <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 border-b border-slate-100 pb-2">상세 설명</h4>
-                <p className="text-slate-700 leading-relaxed whitespace-pre-wrap font-medium">{selectedManual.description}</p>
+                <div className="manual-content" dangerouslySetInnerHTML={{ __html: selectedManual.description }} />
               </div>
               <div className="bg-slate-50 rounded-3xl p-8 border border-slate-100">
                 <h4 className="text-xs font-black text-indigo-500 uppercase tracking-widest mb-4 flex items-center gap-2"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>전산 처리 방법</h4>
@@ -645,7 +665,7 @@ ${recsText}
       {/* Manual Add/Edit Modal */}
       {isManualModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[110] flex items-center justify-center p-6">
-          <div className="bg-white rounded-5xl w-full max-w-lg overflow-hidden shadow-2xl animate-fade-in-up border border-white">
+          <div className="bg-white rounded-5xl w-full max-w-2xl overflow-hidden shadow-2xl animate-fade-in-up border border-white">
             <div className="bg-slate-900 p-8 flex justify-between items-center text-white">
               <h2 className="font-extrabold text-lg tracking-tight">{editingManualId ? '메뉴얼 수정' : '새 메뉴얼 등록'}</h2>
               <button onClick={() => setIsManualModalOpen(false)} className="p-2 hover:bg-white/10 rounded-xl transition-colors"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg></button>
@@ -661,8 +681,14 @@ ${recsText}
                   <select value={newManual.category} onChange={e => setNewManual({...newManual, category: e.target.value})} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-bold text-slate-700 outline-none focus:border-indigo-200 focus:bg-white transition-all appearance-none"><option value="일반">일반</option><option value="전산">전산</option><option value="접수">접수</option><option value="해지">해지</option></select>
                 </div>
                 <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">상세 설명</label>
-                  <textarea required rows={4} placeholder="업무 내용을 상세히 기술하세요" value={newManual.description} onChange={e => setNewManual({...newManual, description: e.target.value})} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3 font-bold text-slate-700 outline-none focus:border-indigo-200 focus:bg-white transition-all" />
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">상세 설명</label>
+                  <ReactQuill
+                    theme="snow"
+                    value={newManual.description}
+                    onChange={(content) => setNewManual(prev => ({ ...prev, description: content }))}
+                    modules={quillModules}
+                    formats={quillFormats}
+                  />
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-indigo-500 uppercase tracking-widest block mb-1">전산 처리 방법</label>
