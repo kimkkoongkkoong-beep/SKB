@@ -440,6 +440,29 @@ const App: React.FC = () => {
     };
   }, [selections, tvType]);
 
+  // 실시간 할인 예상 금액 계산 도우미 (인터넷 버튼용)
+  const getInternetEffectivePrice = (planId: string, basePrice: number) => {
+    let disc = 0;
+    const hasTv = selections.tvId !== 'tv_none' || selections.tv2Id !== 'tv_none';
+    if (selections.isFamilyPlan) {
+      disc = (planId === 'int_100m' ? 5500 : 11000);
+    } else if (selections.mobileLineCount > 0) {
+      disc = (MOBILE_COMBINATION_DISCOUNTS.INTERNET as any)[planId] || 0;
+    } else if (hasTv) {
+      disc = (planId === 'int_100m' ? 1100 : 5500);
+    }
+    return Math.max(0, basePrice - disc);
+  };
+
+  // 실시간 할인 예상 금액 계산 도우미 (TV 버튼용)
+  const getTvEffectivePrice = (planId: string, basePrice: number) => {
+    let disc = 0;
+    if (tvType === 'IPTV' && selections.mobileLineCount > 0 && !selections.isFamilyPlan) {
+      disc = 1100; // 요즘가족결합 시 TV 1100원 할인
+    }
+    return Math.max(0, basePrice - disc);
+  };
+
   const activeDiscounts = useMemo(() => {
     const list = [];
     if (discountBreakdown.bundle > 0) list.push({ name: '결합할인', amount: discountBreakdown.bundle });
@@ -626,14 +649,34 @@ ${recsText}
               <SectionHeader title="속도 선택" step={1}>
                 <button onClick={() => setSelections(prev => ({ ...prev, isFamilyPlan: !prev.isFamilyPlan, mobileLineCount: 0 }))} className={`flex items-center gap-2 px-6 py-3 rounded-2xl border-2 font-black text-sm transition-all ${selections.isFamilyPlan ? 'bg-pastel-500 border-pastel-500 text-white shadow-lg shadow-pastel-100' : 'bg-white border-slate-100 text-slate-400 hover:border-pastel-200'}`}>패밀리 결합</button>
               </SectionHeader>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">{INTERNET_PLANS.map(p => (<PlanCard key={p.id} selected={selections.internetId === p.id} onClick={() => setSelections(prev => ({ ...prev, internetId: p.id }))} title={p.name} price={p.price} description={p.speed}/>))}</div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {INTERNET_PLANS.map(p => (
+                  <PlanCard 
+                    key={p.id} 
+                    selected={selections.internetId === p.id} 
+                    onClick={() => setSelections(prev => ({ ...prev, internetId: p.id }))} 
+                    title={p.name} 
+                    price={getInternetEffectivePrice(p.id, p.price)} 
+                    description={p.speed}
+                  />
+                ))}
+              </div>
               <div className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-6">{INTERNET_ADD_ONS.map(addon => (<button key={addon.id} onClick={() => { const isSelected = selections.addOnIds.includes(addon.id); setSelections(prev => ({ ...prev, addOnIds: isSelected ? prev.addOnIds.filter(id => id !== addon.id) : [...prev.addOnIds, addon.id] })); }} className={`flex items-center justify-between p-6 rounded-3xl border-2 transition-all ${selections.addOnIds.includes(addon.id) ? 'bg-pastel-50 border-pastel-300' : 'bg-white border-slate-50 hover:border-slate-100'}`}><div className="flex flex-col text-left"><span className="text-sm font-black text-slate-800">{addon.name}</span><span className="text-xs text-slate-400 font-medium">{addon.description}</span></div><div className="flex items-center gap-3"><span className="text-sm font-extrabold text-pastel-500">+{addon.price.toLocaleString()}원</span><div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${selections.addOnIds.includes(addon.id) ? 'bg-pastel-500 border-pastel-500 text-white' : 'bg-slate-50 border-slate-100 text-transparent'}`}><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg></div></div></button>))}</div>
             </section>
             <section className="animate-fade-in-up">
               <SectionHeader title="B tv 1" step={2} />
               <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                 <PlanCard selected={selections.tvId === 'tv_none'} onClick={() => setSelections(prev => ({ ...prev, tvId: 'tv_none', tv2Id: 'tv_none' }))} title="미가입" price={0} description="인터넷 단독"/>
-                {(tvType === 'IPTV' ? TV_PLANS : CATV_TV_PLANS).map(p => (<PlanCard key={p.id} selected={selections.tvId === p.id} onClick={() => setSelections(prev => ({ ...prev, tvId: p.id }))} title={p.name} price={p.price} description={`${p.channels}개 채널`}/>))}
+                {(tvType === 'IPTV' ? TV_PLANS : CATV_TV_PLANS).map(p => (
+                  <PlanCard 
+                    key={p.id} 
+                    selected={selections.tvId === p.id} 
+                    onClick={() => setSelections(prev => ({ ...prev, tvId: p.id }))} 
+                    title={p.name} 
+                    price={getTvEffectivePrice(p.id, p.price)} 
+                    description={`${p.channels}개 채널`}
+                  />
+                ))}
               </div>
             </section>
             {isTvSelected && (
