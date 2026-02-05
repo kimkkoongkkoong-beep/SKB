@@ -29,6 +29,12 @@ export const INTERNET_PLANS: InternetPlan[] = [
 
 export const INTERNET_ADD_ONS: PlanOption[] = [
   {
+    id: 'addon_wifi7',
+    name: 'WIFI 7',
+    price: 1100,
+    description: 'Wi-Fi 7 표준 기술로 더 빠르고 끊김 없는  무선 인터넷'
+  },
+  {
     id: 'addon_wings',
     name: '윙즈',
     price: 1650,
@@ -81,10 +87,16 @@ export const STB_OPTIONS: STBOption[] = [
     description: '작지만 강력한 성능의 기본 셋톱박스'
   },
   {
+    id: 'stb_ai5',
+    name: 'AI 5',
+    price: 7700,
+    description: '에이닷(A.) 탑재, 최신 AI 칩셋으로 화질과 사운드를 실시간 최적화'
+  },
+  {
     id: 'stb_ai4v',
     name: 'AI 4 VISION',
     price: 8800,
-    description: '업계 최초 온디바이스 AI 탑재로 화질과 사운드를 실시간 최적화'
+    description: '온디바이스 AI 탑재로 화질과 사운드를 실시간 최적화'
   },
   {
     id: 'stb_ai2',
@@ -95,14 +107,13 @@ export const STB_OPTIONS: STBOption[] = [
   {
     id: 'stb_apple',
     name: 'Apple TV 4K',
-    price: 6600,
+    price: 4400,
     description: '애플의 생태계와 고화질 영상을 동시에'
   }
 ];
 
 export const BASE_BUNDLE_DISCOUNT = 1100; // 기본 인터넷+TV 결합 할인
 
-// 휴대폰 결합 시 상품별 할인액
 export const MOBILE_COMBINATION_DISCOUNTS = {
   INTERNET: {
     'int_100m': 4400,
