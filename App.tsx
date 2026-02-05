@@ -177,7 +177,6 @@ const App: React.FC = () => {
   const [revisionHistory, setRevisionHistory] = useState<ManualRevision[]>([]);
   const [viewingRevision, setViewingRevision] = useState<ManualRevision | null>(null);
 
-  // Firebase State
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [manuals, setManuals] = useState<Manual[]>([]);
   
@@ -214,7 +213,6 @@ const App: React.FC = () => {
   const [customerQuotedFee, setCustomerQuotedFee] = useState<number>(0);
 
   useEffect(() => {
-    // Real-time listener for promotions
     const qPromo = query(collection(db, "promotions"), orderBy("createdAt", "desc"));
     const unsubscribePromo = onSnapshot(qPromo, (snapshot: QuerySnapshot<DocumentData>) => {
       const promoList = snapshot.docs.map((doc: QueryDocumentSnapshot<DocumentData>) => ({
@@ -224,7 +222,6 @@ const App: React.FC = () => {
       setPromotions(promoList);
     });
 
-    // Real-time listener for manuals
     const qManual = query(collection(db, "manuals"), orderBy("createdAt", "desc"));
     const unsubscribeManual = onSnapshot(qManual, (snapshot: QuerySnapshot<DocumentData>) => {
       const manualList = snapshot.docs.map((doc: QueryDocumentSnapshot<DocumentData>) => ({
@@ -312,10 +309,6 @@ const App: React.FC = () => {
                         processMethod: currentData.processMethod,
                     }
                 });
-            } else {
-                console.error("수정 이력을 생성할 원본 문서를 찾을 수 없습니다.");
-                alert("오류가 발생했습니다: 원본 문서를 찾을 수 없습니다.");
-                return;
             }
 
             const { editorName, ...manualData } = newManual;
@@ -404,18 +397,25 @@ const App: React.FC = () => {
     let addOnPrice = 0;
     const isWings = selections.addOnIds.includes('addon_wings');
     const isRelief = selections.addOnIds.includes('addon_relief');
+    const isWifi7 = selections.addOnIds.includes('addon_wifi7');
+    
+    // 윙즈 + 안심 패키지 할인 로직
     if (isWings && isRelief) addOnPrice = 3300;
     else {
       if (isWings) addOnPrice += 1650;
       if (isRelief) addOnPrice += 2200;
     }
+    // WIFI 7은 별도 합산
+    if (isWifi7) addOnPrice += 1100;
+    
     base += addOnPrice;
 
     const totalPrepaid = (selections.prepaidInternet || 0) + (selections.prepaidTv1 || 0) + (selections.prepaidTv2 || 0);
     const breakdown = { bundle: 0, mobile: 0, prepaid: totalPrepaid, stb: 0, family: familyDiscount };
 
     if (tvType === 'IPTV' && hasTv && stb) {
-      if (stb.id === 'stb_ai2' && (tv!.id === 'tv_all' || tv!.id === 'tv_all_plus')) breakdown.stb = 2200;
+      // 셋톱 할인 프로모션
+      if ((stb.id === 'stb_ai2' || stb.id === 'stb_ai5') && (tv!.id === 'tv_all' || tv!.id === 'tv_all_plus')) breakdown.stb = 2200;
       else if (stb.id === 'stb_ai4v') {
         if (tv!.id === 'tv_all') breakdown.stb = 2200;
         else if (tv!.id === 'tv_all_plus') breakdown.stb = 4400;
@@ -440,7 +440,6 @@ const App: React.FC = () => {
     };
   }, [selections, tvType]);
 
-  // 실시간 할인 예상 금액 계산 도우미 (인터넷 버튼용)
   const getInternetEffectivePrice = (planId: string, basePrice: number) => {
     let disc = 0;
     const hasTv = selections.tvId !== 'tv_none' || selections.tv2Id !== 'tv_none';
@@ -454,11 +453,10 @@ const App: React.FC = () => {
     return Math.max(0, basePrice - disc);
   };
 
-  // 실시간 할인 예상 금액 계산 도우미 (TV 버튼용)
   const getTvEffectivePrice = (planId: string, basePrice: number) => {
     let disc = 0;
     if (tvType === 'IPTV' && selections.mobileLineCount > 0 && !selections.isFamilyPlan) {
-      disc = 1100; // 요즘가족결합 시 TV 1100원 할인
+      disc = 1100;
     }
     return Math.max(0, basePrice - disc);
   };
@@ -511,16 +509,21 @@ const App: React.FC = () => {
     let addOnTotal = 0;
     const isWings = selections.addOnIds.includes('addon_wings');
     const isRelief = selections.addOnIds.includes('addon_relief');
+    const isWifi7 = selections.addOnIds.includes('addon_wifi7');
+
     if (isWings && isRelief) addOnTotal = 3300;
     else {
       if (isWings) addOnTotal += 1650;
       if (isRelief) addOnTotal += 2200;
     }
+    if (isWifi7) addOnTotal += 1100;
+
     const iMobileDisc = (discountBreakdown.mobile > 0 && internet) ? (MOBILE_COMBINATION_DISCOUNTS.INTERNET as any)[internet.id] || 0 : 0;
     const iNetPrice = Math.max(0, (internet?.price || 0) + addOnTotal - discountBreakdown.family - discountBreakdown.bundle - iMobileDisc - selections.prepaidInternet);
     const t1MobileDisc = (discountBreakdown.mobile > 0 && tvType === 'IPTV' && hasTv1) ? 1100 : 0;
     const t1NetPrice = Math.max(0, (tv1?.price || 0) + currentEffectiveStbPrice - t1MobileDisc - discountBreakdown.stb - selections.prepaidTv1);
     const t2NetPrice = Math.max(0, (hasTv2 ? currentBtv2Prices[tv2Id as string] : 0) + (hasTv2 ? 2200 : 0) - selections.prepaidTv2);
+    
     let recsText = '';
     if (quotedPriceAnalysis?.recs) {
       const { internet: i, tv1: t1, tv2: t2 } = quotedPriceAnalysis.recs;
@@ -661,7 +664,27 @@ ${recsText}
                   />
                 ))}
               </div>
-              <div className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-6">{INTERNET_ADD_ONS.map(addon => (<button key={addon.id} onClick={() => { const isSelected = selections.addOnIds.includes(addon.id); setSelections(prev => ({ ...prev, addOnIds: isSelected ? prev.addOnIds.filter(id => id !== addon.id) : [...prev.addOnIds, addon.id] })); }} className={`flex items-center justify-between p-6 rounded-3xl border-2 transition-all ${selections.addOnIds.includes(addon.id) ? 'bg-pastel-50 border-pastel-300' : 'bg-white border-slate-50 hover:border-slate-100'}`}><div className="flex flex-col text-left"><span className="text-sm font-black text-slate-800">{addon.name}</span><span className="text-xs text-slate-400 font-medium">{addon.description}</span></div><div className="flex items-center gap-3"><span className="text-sm font-extrabold text-pastel-500">+{addon.price.toLocaleString()}원</span><div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${selections.addOnIds.includes(addon.id) ? 'bg-pastel-500 border-pastel-500 text-white' : 'bg-slate-50 border-slate-100 text-transparent'}`}><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg></div></div></button>))}</div>
+              <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-6">
+                {INTERNET_ADD_ONS.map(addon => (
+                  <button 
+                    key={addon.id} 
+                    onClick={() => { 
+                      const isSelected = selections.addOnIds.includes(addon.id); 
+                      setSelections(prev => ({ ...prev, addOnIds: isSelected ? prev.addOnIds.filter(id => id !== addon.id) : [...prev.addOnIds, addon.id] })); 
+                    }} 
+                    className={`flex items-center justify-between p-6 rounded-3xl border-2 transition-all ${selections.addOnIds.includes(addon.id) ? 'bg-pastel-50 border-pastel-300' : 'bg-white border-slate-50 hover:border-slate-100'}`}
+                  >
+                    <div className="flex flex-col text-left">
+                      <span className="text-sm font-black text-slate-800">{addon.name}</span>
+                      <span className="text-xs text-slate-400 font-medium">{addon.description}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-extrabold text-pastel-500">+{addon.price.toLocaleString()}원</span>
+                      <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${selections.addOnIds.includes(addon.id) ? 'bg-pastel-500 border-pastel-500 text-white' : 'bg-slate-50 border-slate-100 text-transparent'}`}><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg></div>
+                    </div>
+                  </button>
+                ))}
+              </div>
             </section>
             <section className="animate-fade-in-up">
               <SectionHeader title="B tv 1" step={2} />
@@ -683,7 +706,7 @@ ${recsText}
               <div className="space-y-16">
                 <section className="animate-fade-in-up">
                   <SectionHeader title="셋톱박스" step="2-1" />
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{(tvType === 'IPTV' ? STB_OPTIONS : CATV_STB_OPTIONS).map(stb => (<PlanCard key={stb.id} selected={selections.stbId === stb.id} onClick={() => setSelections(prev => ({ ...prev, stbId: stb.id }))} title={stb.name} price={stb.price} description={stb.description}/>))}</div>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">{(tvType === 'IPTV' ? STB_OPTIONS : CATV_STB_OPTIONS).map(stb => (<PlanCard key={stb.id} selected={selections.stbId === stb.id} onClick={() => setSelections(prev => ({ ...prev, stbId: stb.id }))} title={stb.name} price={stb.price} description={stb.description}/>))}</div>
                 </section>
                 <section className="animate-fade-in-up">
                   <SectionHeader title="B tv 2" step="2-2" />
@@ -749,7 +772,6 @@ ${recsText}
         )}
       </main>
 
-      {/* Revision Detail Modal */}
       {viewingRevision && (
           <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[120] flex items-center justify-center p-6">
               <div className="bg-white rounded-5xl w-full max-w-2xl overflow-hidden shadow-2xl animate-fade-in-up border border-white">
@@ -783,7 +805,6 @@ ${recsText}
           </div>
       )}
 
-      {/* Manual Detail Modal */}
       {isManualDetailOpen && selectedManual && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[110] flex items-center justify-center p-6">
           <div className="bg-white rounded-5xl w-full max-w-2xl overflow-hidden shadow-2xl animate-fade-in-up border border-white">
@@ -832,7 +853,6 @@ ${recsText}
         </div>
       )}
 
-      {/* Manual Add/Edit Modal */}
       {isManualModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[110] flex items-center justify-center p-6">
           <div className="bg-white rounded-5xl w-full max-w-2xl overflow-hidden shadow-2xl animate-fade-in-up border border-white">
@@ -877,7 +897,6 @@ ${recsText}
         </div>
       )}
 
-      {/* Floating Summary Footer (only for calculator) */}
       {activeTab === 'calculator' && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[92%] max-w-5xl z-50">
           <div className="glass border border-white/40 shadow-[0_30px_60px_-15px_rgba(139,92,246,0.3)] rounded-4xl p-6 md:p-8 flex flex-col md:flex-row justify-between items-center gap-6">
@@ -910,14 +929,13 @@ ${recsText}
               )}
               <div className="flex flex-col md:flex-row items-center justify-center md:justify-end gap-3 md:gap-8">
                 <div className="flex items-baseline gap-2"><span className="text-xs md:text-sm font-bold text-slate-400 mr-1">최종 월 납부액</span><span className="text-3xl md:text-5xl font-black text-pastel-600 tracking-tighter tabular-nums">{totalPrice.toLocaleString()}</span><span className="text-lg font-black text-slate-800">원</span></div>
-                <button onClick={() => setIsShareModalOpen(true)} className="group flex items-center justify-center w-12 h-12 md:w-14 md:h-14 bg-slate-900 rounded-2xl text-white shadow-xl hover:bg-black transition-all active:scale-95 shrink-0" title="설계 내역 복사"><svg className="w-5 h-5 md:w-6 md:h-6 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3M12 11l3 3m0 0l-3 3m3-3H9" /></svg></button>
+                <button onClick={() => setIsShareModalOpen(true)} className="group flex items-center justify-center w-12 h-12 md:w-14 md:h-14 bg-slate-900 rounded-2xl text-white shadow-xl hover:bg-black transition-all active:scale-95 shrink-0" title="설계 내역 복사"><svg className="w-5 h-5 md:w-6 md:h-6 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3M12 11l3 3m0 0l-3 3m3-3H9" /></svg></button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Share Modal */}
       {isShareModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-6">
           <div className="bg-white rounded-5xl w-full max-w-lg overflow-hidden shadow-2xl animate-fade-in-up border border-white">
@@ -930,7 +948,6 @@ ${recsText}
         </div>
       )}
 
-      {/* Promo Modal */}
       {isPromoModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-6">
           <div className="bg-white rounded-5xl w-full max-w-lg overflow-hidden shadow-2xl animate-fade-in-up border border-white">
