@@ -72,9 +72,9 @@ export const TV_PLANS: TVPlan[] = [
   },
   {
     id: 'tv_all_plus',
-    name: 'B tv All+',
+    name: 'B tv All MAX',
     channels: 258,
-    price: 22000,
+    price: 23000,
     description: 'VOD 무제한 시청'
   }
 ];
