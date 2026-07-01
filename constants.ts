@@ -87,9 +87,9 @@ export const STB_OPTIONS: STBOption[] = [
     description: '작지만 강력한 성능의 기본 셋톱박스'
   },
   {
-    id: 'stb_ai5',
+    id: 'stb_ai5(케어)',
     name: 'AI 5',
-    price: 7700,
+    price: 5500,
     description: '에이닷(A.) 탑재, 최신 AI 칩셋으로 화질과 사운드를 실시간 최적화'
   },
   {
