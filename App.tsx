@@ -27,7 +27,7 @@ const B_TV_2_PRICES: Record<string, number> = {
   'tv_lite': 6050,
   'tv_standard': 7700,
   'tv_all': 9350,
-  'tv_all_plus': 14850
+  'tv_all_plus': 15950
 };
 
 const B_TV_2_POP_PRICES: Record<string, number> = {
